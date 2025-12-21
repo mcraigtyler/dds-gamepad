@@ -5,7 +5,7 @@ if(MSVC)
     # MSVC 17.5 has a C++20 parsing issue in CycloneDDS-CXX headers.
     set(CMAKE_CXX_STANDARD 17)
     # Ensure all targets use the same MSVC runtime library to avoid Debug/Release CRT mismatches.
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")
 else()
     set(CMAKE_CXX_STANDARD 20)
 endif()
