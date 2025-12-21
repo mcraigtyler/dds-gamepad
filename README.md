@@ -32,15 +32,15 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 
 ## Run DDS Gamepad
 
-The main `dds-gamepad` executable reads a YAML config that defines the DDS topic plus mapping rules. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the target control range.
+The main `dds-gamepad` executable reads every YAML file in a config folder. Each config defines one DDS topic and a single mapping rule. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the target control range.
 
-`.\install\boilerplate-dds\bin\dds-gamepad.exe <config.yaml> [domain_id]`
+`.\install\boilerplate-dds\bin\dds-gamepad.exe <config_dir> [domain_id]`
 
-### Example config
+### Example config (one file per topic)
 
 ```yaml
 dds:
-  topic: "vehicle.inputs"
+  topic: "vehicle.throttle"
   type: "Value::Msg"
   idl_file: "idl/Value.idl"
   domain_id: 0
@@ -53,23 +53,12 @@ mapping:
     scale: 1.0
     deadzone: 0.05
     invert: false
-  - name: brake
-    id: 2
-    field: value
-    to: axis:left_trigger
-    scale: 1.0
-    deadzone: 0.05
-  - name: steering
-    id: 3
-    field: value
-    to: axis:left_x
-    scale: 2.0
-    deadzone: 0.02
-    invert: true
 ```
 
 ### Mapping notes
 
+- Place one YAML file per DDS topic in the config directory.
+- Each config must include exactly one mapping entry.
 - `id` matches `Value::Msg::messageID` values coming from DDS.
 - `field` currently supports `value`.
 - `to` supports `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`.

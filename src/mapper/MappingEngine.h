@@ -30,11 +30,9 @@ class MappingEngine {
 public:
     explicit MappingEngine(std::vector<MappingDefinition> mappings);
 
-    bool Apply(int message_id, float value);
-    const GamepadState& State() const;
+    bool Apply(int message_id, float value, GamepadState& state) const;
 
 private:
     std::vector<MappingDefinition> mappings_;
-    GamepadState state_;
 };
 }  // namespace mapper

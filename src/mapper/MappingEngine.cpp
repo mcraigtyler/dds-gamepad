@@ -33,9 +33,9 @@ uint8_t TriggerFromNormalized(float value) {
 }  // namespace
 
 MappingEngine::MappingEngine(std::vector<MappingDefinition> mappings)
-    : mappings_(std::move(mappings)), state_() {}
+    : mappings_(std::move(mappings)) {}
 
-bool MappingEngine::Apply(int message_id, float value) {
+bool MappingEngine::Apply(int message_id, float value, GamepadState& state) const {
     bool updated = false;
     for (const auto& mapping : mappings_) {
         if (mapping.id != message_id) {
@@ -66,31 +66,27 @@ bool MappingEngine::Apply(int message_id, float value) {
 
         switch (mapping.target) {
             case ControlTarget::LeftTrigger:
-                state_.left_trigger = TriggerFromNormalized(mapped_value);
+                state.left_trigger = TriggerFromNormalized(mapped_value);
                 break;
             case ControlTarget::RightTrigger:
-                state_.right_trigger = TriggerFromNormalized(mapped_value);
+                state.right_trigger = TriggerFromNormalized(mapped_value);
                 break;
             case ControlTarget::LeftStickX:
-                state_.left_stick_x = AxisFromNormalized(mapped_value);
+                state.left_stick_x = AxisFromNormalized(mapped_value);
                 break;
             case ControlTarget::LeftStickY:
-                state_.left_stick_y = AxisFromNormalized(mapped_value);
+                state.left_stick_y = AxisFromNormalized(mapped_value);
                 break;
             case ControlTarget::RightStickX:
-                state_.right_stick_x = AxisFromNormalized(mapped_value);
+                state.right_stick_x = AxisFromNormalized(mapped_value);
                 break;
             case ControlTarget::RightStickY:
-                state_.right_stick_y = AxisFromNormalized(mapped_value);
+                state.right_stick_y = AxisFromNormalized(mapped_value);
                 break;
         }
         updated = true;
     }
 
     return updated;
-}
-
-const GamepadState& MappingEngine::State() const {
-    return state_;
 }
 }  // namespace mapper

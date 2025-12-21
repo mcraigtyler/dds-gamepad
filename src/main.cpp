@@ -1,8 +1,10 @@
 ﻿// main.cpp
 #include <cstdlib>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #include "emulator/VigemClient.h"
@@ -16,7 +18,24 @@
 namespace {
 void print_usage(const char* exe)
 {
-    std::cerr << "Usage: " << exe << " <config.yaml> [domain_id]" << std::endl;
+    std::cerr << "Usage: " << exe << " <config_dir> [domain_id]" << std::endl;
+}
+
+int ResolveDomainId(const std::vector<config::AppConfig>& configs) {
+    int domain_id = 0;
+    bool has_domain_id = false;
+    for (const auto& config : configs) {
+        if (!config.dds.has_domain_id) {
+            continue;
+        }
+        if (!has_domain_id) {
+            domain_id = config.dds.domain_id;
+            has_domain_id = true;
+        } else if (domain_id != config.dds.domain_id) {
+            throw std::runtime_error("Configs specify multiple domain_id values; supply [domain_id] on the command line.");
+        }
+    }
+    return domain_id;
 }
 }
 
@@ -29,15 +48,21 @@ int main(int argc, char* argv[])
 
     const std::string config_path = argv[1];
 
-    config::AppConfig app_config;
+    std::vector<config::AppConfig> configs;
     try {
-        app_config = config::ConfigLoader::Load(config_path);
+        configs = config::ConfigLoader::LoadDirectory(config_path);
     } catch (const std::exception& ex) {
         std::cerr << "Failed to load config: " << ex.what() << std::endl;
         return EXIT_FAILURE;
     }
 
-    int domain_id = app_config.dds.has_domain_id ? app_config.dds.domain_id : 0;
+    int domain_id = 0;
+    try {
+        domain_id = ResolveDomainId(configs);
+    } catch (const std::exception& ex) {
+        std::cerr << "Invalid domain_id: " << ex.what() << std::endl;
+        return EXIT_FAILURE;
+    }
     if (argc >= 3) {
         try {
             domain_id = std::stoi(argv[2]);
@@ -61,45 +86,68 @@ int main(int argc, char* argv[])
     std::cout << "ViGEm output is only supported on Windows; running in log-only mode." << std::endl;
 #endif
 
-    mapper::MappingEngine mapping_engine(app_config.mappings);
-
     dds::domain::DomainParticipant participant(domain_id);
-    dds::topic::Topic<Value::Msg> sub_topic(participant, app_config.dds.topic);
-
     dds::sub::Subscriber subscriber(participant);
-    dds::sub::DataReader<Value::Msg> reader(subscriber, sub_topic);
 
-    std::cout << "Subscribing to '" << app_config.dds.topic << "' (domain " << domain_id << ")"
-              << std::endl;
+    struct TopicHandler {
+        std::string name;
+        dds::topic::Topic<Value::Msg> topic;
+        dds::sub::DataReader<Value::Msg> reader;
+        mapper::MappingEngine mapping_engine;
+
+        TopicHandler(dds::domain::DomainParticipant& participant,
+                     dds::sub::Subscriber& subscriber,
+                     std::string topic_name,
+                     mapper::MappingEngine engine)
+            : name(std::move(topic_name)),
+              topic(participant, name),
+              reader(subscriber, topic),
+              mapping_engine(std::move(engine)) {}
+    };
+
+    std::vector<TopicHandler> handlers;
+    handlers.reserve(configs.size());
+    for (const auto& config : configs) {
+        std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << domain_id << ")"
+                  << std::endl;
+        handlers.emplace_back(participant,
+                              subscriber,
+                              config.dds.topic,
+                              mapper::MappingEngine(config.mappings));
+    }
+
+    mapper::GamepadState state;
 
     while (true) {
-        auto samples = reader.take();
-        for (const auto& s : samples) {
-            if (!s.info().valid()) {
-                continue;
-            }
-            const int message_id = s.data().messageID();
-            const float raw_value = s.data().value();
-            if (!mapping_engine.Apply(message_id, raw_value)) {
-                continue;
-            }
+        for (auto& handler : handlers) {
+            auto samples = handler.reader.take();
+            for (const auto& s : samples) {
+                if (!s.info().valid()) {
+                    continue;
+                }
+                const int message_id = s.data().messageID();
+                const float raw_value = s.data().value();
+                if (!handler.mapping_engine.Apply(message_id, raw_value, state)) {
+                    continue;
+                }
 
 #ifdef _WIN32
-            if (!client.UpdateState(mapping_engine.State())) {
-                std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
-                return EXIT_FAILURE;
-            }
+                if (!client.UpdateState(state)) {
+                    std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
+                    return EXIT_FAILURE;
+                }
 #endif
-            const auto& state = mapping_engine.State();
-            std::cout << "rx messageID=" << message_id
-                      << " value=" << raw_value
-                      << " -> LT=" << static_cast<int>(state.left_trigger)
-                      << " RT=" << static_cast<int>(state.right_trigger)
-                      << " LX=" << state.left_stick_x
-                      << " LY=" << state.left_stick_y
-                      << " RX=" << state.right_stick_x
-                      << " RY=" << state.right_stick_y
-                      << std::endl;
+                std::cout << "rx topic=" << handler.name
+                          << " messageID=" << message_id
+                          << " value=" << raw_value
+                          << " -> LT=" << static_cast<int>(state.left_trigger)
+                          << " RT=" << static_cast<int>(state.right_trigger)
+                          << " LX=" << state.left_stick_x
+                          << " LY=" << state.left_stick_y
+                          << " RX=" << state.right_stick_x
+                          << " RY=" << state.right_stick_y
+                          << std::endl;
+            }
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(50));

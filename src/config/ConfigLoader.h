@@ -22,5 +22,6 @@ struct AppConfig {
 class ConfigLoader {
 public:
     static AppConfig Load(const std::string& path);
+    static std::vector<AppConfig> LoadDirectory(const std::string& path);
 };
 }  // namespace config

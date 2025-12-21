@@ -1,7 +1,10 @@
 #include "config/ConfigLoader.h"
 
+#include <algorithm>
+#include <filesystem>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 
 #include <yaml-cpp/yaml.h>
 
@@ -124,10 +127,43 @@ AppConfig ConfigLoader::Load(const std::string& path) {
         config.mappings.push_back(mapping);
     }
 
-    if (config.mappings.empty()) {
-        throw std::runtime_error("Config must include at least one mapping entry.");
+    if (config.mappings.size() != 1U) {
+        throw std::runtime_error("Config must include exactly one mapping entry.");
     }
 
     return config;
+}
+
+std::vector<AppConfig> ConfigLoader::LoadDirectory(const std::string& path) {
+    namespace fs = std::filesystem;
+    std::vector<AppConfig> configs;
+
+    const fs::path root(path);
+    if (!fs::exists(root) || !fs::is_directory(root)) {
+        throw std::runtime_error("Config path must be a directory: " + path);
+    }
+
+    std::vector<fs::path> files;
+    for (const auto& entry : fs::directory_iterator(root)) {
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+        const auto ext = entry.path().extension().string();
+        if (ext == ".yaml" || ext == ".yml") {
+            files.push_back(entry.path());
+        }
+    }
+
+    if (files.empty()) {
+        throw std::runtime_error("Config directory contains no .yaml or .yml files: " + path);
+    }
+
+    std::sort(files.begin(), files.end());
+    configs.reserve(files.size());
+    for (const auto& file : files) {
+        configs.push_back(Load(file.string()));
+    }
+
+    return configs;
 }
 }  // namespace config
