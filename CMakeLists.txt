@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.31)
-project(dds-boilerplate)
+project(dds-gamepad)
 
 if(MSVC)
     # MSVC 17.5 has a C++20 parsing issue in CycloneDDS-CXX headers.
@@ -22,7 +22,7 @@ set(IDL_FILES
 )
 idlcxx_generate(TARGET ${IDL_LIB} FILES ${IDL_FILES} WARNINGS no-implicit-extensibility)
 
-set(EXE_NAME dds-boilerplate)
+set(EXE_NAME dds-gamepad)
 set(IDL_HEADERS
         ${CMAKE_CURRENT_BINARY_DIR}/Value.hpp
 )
@@ -35,6 +35,7 @@ set(EXE_SOURCES
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
 target_link_libraries(${EXE_NAME}
+    PRIVATE
         ${IDL_LIB}
         CycloneDDS::ddsc
         CycloneDDS-CXX::ddscxx)
