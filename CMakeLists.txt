@@ -48,7 +48,27 @@ target_include_directories(${EXE_NAME} PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
 
 if(WIN32)
-    find_package(ViGEmClient CONFIG REQUIRED)
+    include(FetchContent)
+
+    set(VIGEMCLIENT_SOURCE_DIR "" CACHE PATH "Optional local path to ViGEmClient source")
+    if(VIGEMCLIENT_SOURCE_DIR)
+        add_subdirectory(${VIGEMCLIENT_SOURCE_DIR} ${CMAKE_BINARY_DIR}/vigemclient)
+    else()
+        FetchContent_Declare(
+                ViGEmClient
+                GIT_REPOSITORY https://github.com/ViGEm/ViGEmClient.git
+                GIT_TAG v1.21.222.0
+        )
+        FetchContent_MakeAvailable(ViGEmClient)
+    endif()
+
+    if(TARGET ViGEmClient::ViGEmClient)
+        set(_vigemclient_target ViGEmClient::ViGEmClient)
+    elseif(TARGET ViGEmClient)
+        set(_vigemclient_target ViGEmClient)
+    else()
+        message(FATAL_ERROR "ViGEmClient target not found. Ensure the ViGEmClient source provides a CMake target.")
+    endif()
 
     add_library(vigem_wrapper STATIC
             src/emulator/VigemClient.cpp
@@ -57,7 +77,7 @@ if(WIN32)
     target_include_directories(vigem_wrapper PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    target_link_libraries(vigem_wrapper PUBLIC ViGEmClient::ViGEmClient)
+    target_link_libraries(vigem_wrapper PUBLIC ${_vigemclient_target})
     target_compile_definitions(vigem_wrapper PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 
     add_executable(vigem_sanity src/vigem_sample.cpp)
