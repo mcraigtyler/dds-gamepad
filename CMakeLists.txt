@@ -12,6 +12,15 @@ if(NOT TARGET CycloneDDS-CXX::ddscxx)
   find_package(CycloneDDS-CXX REQUIRED)
 endif()
 
+include(FetchContent)
+
+FetchContent_Declare(
+        yaml-cpp
+        GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+        GIT_TAG yaml-cpp-0.8.0
+)
+FetchContent_MakeAvailable(yaml-cpp)
+
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     include(${CMAKE_SOURCE_DIR}/external/vcpkg/scripts/buildsystems/vcpkg.cmake)
 endif()
@@ -31,6 +40,8 @@ set(EXE_HEADERS
 )
 set(EXE_SOURCES
         src/main.cpp
+        src/config/ConfigLoader.cpp
+        src/mapper/MappingEngine.cpp
 )
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
@@ -38,7 +49,8 @@ target_link_libraries(${EXE_NAME}
     PRIVATE
         ${IDL_LIB}
         CycloneDDS::ddsc
-        CycloneDDS-CXX::ddscxx)
+        CycloneDDS-CXX::ddscxx
+        yaml-cpp)
 if(WIN32)
     target_compile_definitions(${EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
 endif()
@@ -49,8 +61,6 @@ target_include_directories(${EXE_NAME} PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
 
 if(WIN32)
-    include(FetchContent)
-
     set(VIGEMCLIENT_SOURCE_DIR "" CACHE PATH "Optional local path to ViGEmClient source")
     if(VIGEMCLIENT_SOURCE_DIR)
         add_subdirectory(${VIGEMCLIENT_SOURCE_DIR} ${CMAKE_BINARY_DIR}/vigemclient)

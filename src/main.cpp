@@ -1,6 +1,4 @@
 ﻿// main.cpp
-#include <algorithm>
-#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -10,20 +8,15 @@
 #include "emulator/VigemClient.h"
 #endif
 
+#include "config/ConfigLoader.h"
 #include "dds_includes.h"
+#include "mapper/MappingEngine.h"
 #include "Value.hpp"
 
 namespace {
 void print_usage(const char* exe)
 {
-    std::cerr << "Usage: " << exe << " <sub_topic> [domain_id]" << std::endl;
-}
-
-uint8_t scale_to_trigger(float value)
-{
-    const float clamped = std::clamp(value, 0.0f, 1.0f);
-    const float scaled = clamped * 255.0f;
-    return static_cast<uint8_t>(std::lround(scaled));
+    std::cerr << "Usage: " << exe << " <config.yaml> [domain_id]" << std::endl;
 }
 }
 
@@ -34,9 +27,17 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    const std::string sub_topic_name = argv[1];
+    const std::string config_path = argv[1];
 
-    int domain_id = 0;
+    config::AppConfig app_config;
+    try {
+        app_config = config::ConfigLoader::Load(config_path);
+    } catch (const std::exception& ex) {
+        std::cerr << "Failed to load config: " << ex.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    int domain_id = app_config.dds.has_domain_id ? app_config.dds.domain_id : 0;
     if (argc >= 3) {
         try {
             domain_id = std::stoi(argv[2]);
@@ -60,13 +61,15 @@ int main(int argc, char* argv[])
     std::cout << "ViGEm output is only supported on Windows; running in log-only mode." << std::endl;
 #endif
 
+    mapper::MappingEngine mapping_engine(app_config.mappings);
+
     dds::domain::DomainParticipant participant(domain_id);
-    dds::topic::Topic<Value::Msg> sub_topic(participant, sub_topic_name);
+    dds::topic::Topic<Value::Msg> sub_topic(participant, app_config.dds.topic);
 
     dds::sub::Subscriber subscriber(participant);
     dds::sub::DataReader<Value::Msg> reader(subscriber, sub_topic);
 
-    std::cout << "Subscribing to '" << sub_topic_name << "' (domain " << domain_id << ")"
+    std::cout << "Subscribing to '" << app_config.dds.topic << "' (domain " << domain_id << ")"
               << std::endl;
 
     while (true) {
@@ -75,18 +78,28 @@ int main(int argc, char* argv[])
             if (!s.info().valid()) {
                 continue;
             }
+            const int message_id = s.data().messageID();
             const float raw_value = s.data().value();
-            const uint8_t trigger_value = scale_to_trigger(raw_value);
-            std::cout << "rx messageID=" << s.data().messageID()
-                      << " value=" << raw_value << " -> trigger=" << static_cast<int>(trigger_value)
-                      << std::endl;
+            if (!mapping_engine.Apply(message_id, raw_value)) {
+                continue;
+            }
 
 #ifdef _WIN32
-            if (!client.UpdateRightTrigger(trigger_value)) {
-                std::cerr << "Failed to update right trigger: " << client.LastError() << std::endl;
+            if (!client.UpdateState(mapping_engine.State())) {
+                std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
                 return EXIT_FAILURE;
             }
 #endif
+            const auto& state = mapping_engine.State();
+            std::cout << "rx messageID=" << message_id
+                      << " value=" << raw_value
+                      << " -> LT=" << static_cast<int>(state.left_trigger)
+                      << " RT=" << static_cast<int>(state.right_trigger)
+                      << " LX=" << state.left_stick_x
+                      << " LY=" << state.left_stick_y
+                      << " RX=" << state.right_stick_x
+                      << " RY=" << state.right_stick_y
+                      << std::endl;
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(50));

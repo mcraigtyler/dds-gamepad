@@ -32,9 +32,49 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 
 ## Run DDS Gamepad
 
-The main `dds-boilerplate` executable subscribes to a DDS topic carrying `Value::Msg` samples. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the Xbox 360 right trigger range (`0` to `255`).
+The main `dds-gamepad` executable reads a YAML config that defines the DDS topic plus mapping rules. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the target control range.
 
-`.\install\boilerplate-dds\bin\dds-boilerplate.exe <dds_topic> [domain_id]`
+`.\install\boilerplate-dds\bin\dds-gamepad.exe <config.yaml> [domain_id]`
+
+### Example config
+
+```yaml
+dds:
+  topic: "vehicle.inputs"
+  type: "Value::Msg"
+  idl_file: "idl/Value.idl"
+  domain_id: 0
+
+mapping:
+  - name: throttle
+    id: 1
+    field: value
+    to: axis:right_trigger
+    scale: 1.0
+    deadzone: 0.05
+    invert: false
+  - name: brake
+    id: 2
+    field: value
+    to: axis:left_trigger
+    scale: 1.0
+    deadzone: 0.05
+  - name: steering
+    id: 3
+    field: value
+    to: axis:left_x
+    scale: 2.0
+    deadzone: 0.02
+    invert: true
+```
+
+### Mapping notes
+
+- `id` matches `Value::Msg::messageID` values coming from DDS.
+- `field` currently supports `value`.
+- `to` supports `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`.
+- `scale` is applied before `deadzone` and `invert`.
+- `invert` flips axis direction for sticks or maps triggers as `1.0 - value`.
 
 ## ViGEm Sanity Check
 
