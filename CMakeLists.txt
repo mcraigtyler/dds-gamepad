@@ -1,9 +1,19 @@
 ﻿cmake_minimum_required(VERSION 3.31)
 project(dds-boilerplate)
 
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 if(MSVC)
     # MSVC 17.5 has a C++20 parsing issue in CycloneDDS-CXX headers.
     set(CMAKE_CXX_STANDARD 17)
+    # Ensure all targets use the same MSVC runtime library to avoid Debug/Release CRT mismatches.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+    # Prefer Release-configured imported libraries when Debug variants are unavailable.
+    set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release CACHE STRING "" FORCE)
+    set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release CACHE STRING "" FORCE)
+    set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Release CACHE STRING "" FORCE)
 else()
     set(CMAKE_CXX_STANDARD 20)
 endif()
@@ -22,7 +32,7 @@ set(IDL_FILES
 )
 idlcxx_generate(TARGET ${IDL_LIB} FILES ${IDL_FILES} WARNINGS no-implicit-extensibility)
 
-set(EXE_NAME dds-boilerplate)
+set(EXE_NAME dds-gamepad)
 set(IDL_HEADERS
         ${CMAKE_CURRENT_BINARY_DIR}/Value.hpp
 )
@@ -34,7 +44,7 @@ set(EXE_SOURCES
 )
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
-target_link_libraries(${EXE_NAME}
+target_link_libraries(${EXE_NAME} PRIVATE
         ${IDL_LIB}
         CycloneDDS::ddsc
         CycloneDDS-CXX::ddscxx)
@@ -84,6 +94,8 @@ if(WIN32)
     add_executable(vigem_sanity src/vigem_sample.cpp)
     target_link_libraries(vigem_sanity PRIVATE vigem_wrapper)
     target_compile_definitions(vigem_sanity PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+
+    target_link_libraries(${EXE_NAME} PRIVATE vigem_wrapper)
 endif()
 
 # Embed runtime library search paths so installed binary finds CycloneDDS libs without LD_LIBRARY_PATH.
