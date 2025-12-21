@@ -1,5 +1,8 @@
 #include "emulator/VigemClient.h"
 
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+
 #include <ViGEm/Client.h>
 
 #include <sstream>
@@ -34,30 +37,10 @@ std::string StatusToString(VIGEM_ERROR status) {
             return "VIGEM_ERROR_CALLBACK_NOT_FOUND";
         case VIGEM_ERROR_BUS_ALREADY_CONNECTED:
             return "VIGEM_ERROR_BUS_ALREADY_CONNECTED";
-        case VIGEM_ERROR_BUS_NOT_CONNECTED:
-            return "VIGEM_ERROR_BUS_NOT_CONNECTED";
-        case VIGEM_ERROR_BUS_RESERVED:
-            return "VIGEM_ERROR_BUS_RESERVED";
-        case VIGEM_ERROR_BUS_MALFUNCTION:
-            return "VIGEM_ERROR_BUS_MALFUNCTION";
-        case VIGEM_ERROR_BUS_LOCKED:
-            return "VIGEM_ERROR_BUS_LOCKED";
-        case VIGEM_ERROR_BUS_UNINITIALIZED:
-            return "VIGEM_ERROR_BUS_UNINITIALIZED";
-        case VIGEM_ERROR_DRIVER_NOT_INSTALLED:
-            return "VIGEM_ERROR_DRIVER_NOT_INSTALLED";
-        case VIGEM_ERROR_DRIVER_NOT_FOUND:
-            return "VIGEM_ERROR_DRIVER_NOT_FOUND";
-        case VIGEM_ERROR_DRIVER_ALREADY_INSTALLED:
-            return "VIGEM_ERROR_DRIVER_ALREADY_INSTALLED";
-        case VIGEM_ERROR_DRIVER_ALREADY_UNINSTALLED:
-            return "VIGEM_ERROR_DRIVER_ALREADY_UNINSTALLED";
         case VIGEM_ERROR_NOT_SUPPORTED:
             return "VIGEM_ERROR_NOT_SUPPORTED";
         case VIGEM_ERROR_TIMED_OUT:
             return "VIGEM_ERROR_TIMED_OUT";
-        case VIGEM_ERROR_INSUFFICIENT_RESOURCES:
-            return "VIGEM_ERROR_INSUFFICIENT_RESOURCES";
         default: {
             std::ostringstream stream;
             stream << "VIGEM_ERROR_UNKNOWN(" << static_cast<int>(status) << ")";
