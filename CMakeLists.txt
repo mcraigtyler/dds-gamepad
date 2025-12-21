@@ -12,18 +12,11 @@ if(NOT TARGET CycloneDDS-CXX::ddscxx)
   find_package(CycloneDDS-CXX REQUIRED)
 endif()
 
-include(FetchContent)
-
-FetchContent_Declare(
-        yaml-cpp
-        GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
-        GIT_TAG 0.8.0
-)
-FetchContent_MakeAvailable(yaml-cpp)
-
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     include(${CMAKE_SOURCE_DIR}/external/vcpkg/scripts/buildsystems/vcpkg.cmake)
 endif()
+
+find_package(yaml-cpp CONFIG REQUIRED)
 
 set(IDL_LIB cyclonedds_lib)
 set(IDL_FILES
@@ -50,7 +43,7 @@ target_link_libraries(${EXE_NAME}
         ${IDL_LIB}
         CycloneDDS::ddsc
         CycloneDDS-CXX::ddscxx
-        yaml-cpp)
+        yaml-cpp::yaml-cpp)
 if(WIN32)
     target_compile_definitions(${EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
 endif()
