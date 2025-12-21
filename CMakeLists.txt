@@ -34,7 +34,7 @@ set(EXE_SOURCES
 )
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
-target_link_libraries(${EXE_NAME}
+target_link_libraries(${EXE_NAME} PRIVATE
         ${IDL_LIB}
         CycloneDDS::ddsc
         CycloneDDS-CXX::ddscxx)
