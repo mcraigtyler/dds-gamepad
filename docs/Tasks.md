@@ -32,9 +32,10 @@
 - [ ] 3.0 Read Value.idl messages from Topic and convert to Throttle inputs
     - [ ] 3.1 Confirm command-line topic argument handling in `src/main.cpp` and fail fast if missing/invalid.
     - [ ] 3.2 Subscribe to the provided DDS topic for `Value::Msg` and read incoming samples in the main loop.
-    - [ ] 3.3 Define the expected DDS value range and add a scaling + clamp step to map into the gamepad right trigger range. Incoming DDS messages will have a value range of 0 to 1 for throttle position.
-    - [ ] 3.4 Replace the 3-second emulated trigger cycle with DDS-driven trigger updates.
-    - [ ] 3.5 Add minimal logging or console output to verify incoming values and resulting trigger output during manual testing.
+    - [ ] 3.3 Remove existing publisher in main, it is no longer needed from the boilerplate.
+    - [ ] 3.4 Define the expected DDS value range and add a scaling + clamp step to map into the gamepad right trigger range. Incoming DDS messages will have a value range of 0 to 1 for throttle position.
+    - [ ] 3.5 Replace the 3-second emulated trigger cycle with DDS-driven trigger updates.
+    - [ ] 3.6 Add minimal logging or console output to verify incoming values and resulting trigger output during manual testing.
 
 - [ ] 4.0 Add YAML-driven mapping configuration
     - [ ] 4.1 Define the YAML schema for DDS topic + mapping entries (per PRD) and add validation.
