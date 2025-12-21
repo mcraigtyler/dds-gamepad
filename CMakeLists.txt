@@ -11,7 +11,9 @@ if(MSVC)
     # Ensure all targets use the same MSVC runtime library to avoid Debug/Release CRT mismatches.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
     # Prefer Release-configured imported libraries when Debug variants are unavailable.
-    set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release)
+    set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release CACHE STRING "" FORCE)
+    set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release CACHE STRING "" FORCE)
+    set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Release CACHE STRING "" FORCE)
 else()
     set(CMAKE_CXX_STANDARD 20)
 endif()
