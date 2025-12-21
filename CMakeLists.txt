@@ -81,6 +81,8 @@ if(WIN32)
     target_compile_definitions(vigem_wrapper PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     target_link_libraries(vigem_wrapper PRIVATE Setupapi)
 
+    target_link_libraries(${EXE_NAME} PRIVATE vigem_wrapper)
+
     add_executable(vigem_sanity src/vigem_sample.cpp)
     target_link_libraries(vigem_sanity PRIVATE vigem_wrapper)
     target_compile_definitions(vigem_sanity PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
