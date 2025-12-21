@@ -47,6 +47,45 @@ target_include_directories(${EXE_NAME} PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
 
+if(WIN32)
+    include(FetchContent)
+
+    set(VIGEMCLIENT_SOURCE_DIR "" CACHE PATH "Optional local path to ViGEmClient source")
+    if(VIGEMCLIENT_SOURCE_DIR)
+        add_subdirectory(${VIGEMCLIENT_SOURCE_DIR} ${CMAKE_BINARY_DIR}/vigemclient)
+    else()
+        FetchContent_Declare(
+                ViGEmClient
+                GIT_REPOSITORY https://github.com/ViGEm/ViGEmClient.git
+                GIT_TAG v1.21.222.0
+        )
+        FetchContent_MakeAvailable(ViGEmClient)
+    endif()
+
+    if(TARGET ViGEmClient::ViGEmClient)
+        set(_vigemclient_target ViGEmClient::ViGEmClient)
+    elseif(TARGET ViGEmClient)
+        set(_vigemclient_target ViGEmClient)
+    else()
+        message(FATAL_ERROR "ViGEmClient target not found. Ensure the ViGEmClient source provides a CMake target.")
+    endif()
+
+    add_library(vigem_wrapper STATIC
+            src/emulator/VigemClient.cpp
+            src/emulator/VigemClient.h
+    )
+    target_include_directories(vigem_wrapper PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(vigem_wrapper PUBLIC ${_vigemclient_target})
+    target_compile_definitions(vigem_wrapper PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(vigem_wrapper PRIVATE Setupapi)
+
+    add_executable(vigem_sanity src/vigem_sample.cpp)
+    target_link_libraries(vigem_sanity PRIVATE vigem_wrapper)
+    target_compile_definitions(vigem_sanity PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 # Embed runtime library search paths so installed binary finds CycloneDDS libs without LD_LIBRARY_PATH.
 set_target_properties(${EXE_NAME} PROPERTIES
         BUILD_RPATH "$ORIGIN/../../cyclonedds/lib;$ORIGIN/../../cyclonedds-cxx/lib"
@@ -58,6 +97,9 @@ set(INSTALL_DIR "" CACHE PATH "Installation directory")
 
 if(NOT "${INSTALL_DIR}" STREQUAL "")
     install(TARGETS ${EXE_NAME} RUNTIME DESTINATION ${INSTALL_DIR}/bin)
+    if(WIN32)
+        install(TARGETS vigem_sanity RUNTIME DESTINATION ${INSTALL_DIR}/bin)
+    endif()
     if(WIN32)
         # Copy runtime DLLs next to the installed executable for easy local runs.
         set(_install_bin "${INSTALL_DIR}/bin")

@@ -10,6 +10,8 @@ Before opening VS Code run the following from powershell:
 - Initialize Cyclone Libraries: `powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\install_cyclonedds.ps1 -Force -Generator "Visual Studio 17 2022"`
 - Initlialize Git Submodules: `git submodule update --init --recursive`
 - Initialize vcpkg Submodule: `.\external\vcpkg\bootstrap-vcpkg.bat`
+- Install the ViGEmBus driver (required for virtual controllers). Download the latest installer from https://github.com/nefarius/ViGEmBus/releases and run it as administrator.
+- ViGEmClient is fetched by CMake with FetchContent. If your build machine cannot access GitHub, clone https://github.com/ViGEm/ViGEmClient and configure with `-DVIGEMCLIENT_SOURCE_DIR=path\to\ViGEmClient`.
 
 ## Configure and Build Source
 
@@ -28,3 +30,8 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 
 `.\install\simple-dds\bin\simple-sim.exe --topics .\install\simple-dds\config\input`
 
+## ViGEm Sanity Check
+
+The `vigem_sanity` executable creates a virtual Xbox 360 controller and sets the right trigger to a fixed value for a few seconds. Ensure the ViGEmBus driver is installed, then run:
+
+`.\install\simple-dds\bin\vigem_sanity.exe`
