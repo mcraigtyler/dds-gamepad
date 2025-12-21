@@ -18,6 +18,8 @@ endif()
 
 find_package(yaml-cpp CONFIG REQUIRED)
 
+include(FetchContent)
+
 set(IDL_LIB cyclonedds_lib)
 set(IDL_FILES
         "./idl/Value.idl"
