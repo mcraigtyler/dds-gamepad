@@ -119,6 +119,14 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
             "${_cyclonedds_cxx_bin}/ddscxx.dll"
             DESTINATION ${_install_bin}
         )
+        # Also copy yaml-cpp runtime DLL next to the installed executable so
+        # local runs don't fail with "yaml-cpp.dll was not found." Use the
+        # target file generator expression to locate the imported target's
+        # runtime file (DLL) provided by vcpkg or other package config.
+        install(FILES
+            "$<TARGET_FILE:yaml-cpp::yaml-cpp>"
+            DESTINATION ${_install_bin}
+        )
     endif()
 
     # Install IDL files
