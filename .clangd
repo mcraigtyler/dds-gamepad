@@ -1,0 +1,9 @@
+CompileFlags:
+  Add: [
+    -isystem, ./install/cyclonedds/include,
+    -isystem, ./install/cyclonedds-cxx/include/ddscxx,
+    -isystem, external,
+    -isystem, vcpkg_installed,
+    -isystem, build,
+    -isystem, cmake-build-debug
+  ]

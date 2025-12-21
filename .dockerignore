@@ -1,0 +1,8 @@
+# Ignore local build artifacts to prevent stale CMake caches inside container
+build/
+external/cyclonedds/build/
+external/cyclonedds-cxx/build/
+install/
+# Optional editor / tooling caches
+.vscode/
+*.swp

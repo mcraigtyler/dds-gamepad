@@ -1,0 +1,85 @@
+# GitLab CI for simple-dds-sim
+# Flow:
+#  - build-image: runs ONLY on merge requests targeting branch 'dev'
+#  - deploy-image: runs ONLY after merge (push pipeline on 'dev') and rebuilds & pushes runtime image
+# Assumes GitLab project registry at $CI_REGISTRY_IMAGE.
+# Uses Docker-in-Docker; switch to Kaniko/BuildKit executor if preferred.
+
+stages:
+  - build
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""           # Disable TLS for DinD (GitLab provided service)
+  DOCKER_BUILDKIT: 1                # Enable BuildKit (faster builds)
+  IMAGE_NAME: "simple-sim"
+
+# (Optional) Enable layer cache (often ineffective on shared runners)
+# cache:
+#   key: docker-layer-cache
+#   paths:
+#     - /var/lib/docker
+
+ # Reusable login snippet (use CI_JOB_TOKEN for auth)
+.login_registry: &login_registry |
+  echo "Logging into $CI_REGISTRY with CI_JOB_TOKEN";
+  echo "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY";
+
+build-image:
+  stage: build
+  image: docker:24.0.7
+  services:
+    - name: docker:24.0.7-dind
+      command: ["--tls=false"]
+  rules:
+    # Run for MR targeting dev
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
+      when: on_success
+    # Run for push on dev (post-merge) so deploy can reuse artifact
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "dev"'
+      when: on_success
+    - when: never
+  script:
+    - *login_registry
+    - export IMAGE_TAG=${CI_COMMIT_SHORT_SHA}
+    - export IMAGE_FULL="$CI_REGISTRY_IMAGE:$IMAGE_TAG"
+    - echo "Building MR image (target dev): $IMAGE_FULL";
+    - docker build --pull --target runtime -t "$IMAGE_FULL" .
+    - docker push "$IMAGE_FULL"
+    - echo "Saving image artifact tar for deploy stage reuse"
+    - docker save "$IMAGE_FULL" > image.tar
+  artifacts:
+    name: "image-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - image.tar
+    expire_in: 1 day
+
+deploy-image:
+  stage: deploy
+  image: docker:24.0.7
+  services:
+    - name: docker:24.0.7-dind
+      command: ["--tls=false"]
+  environment:
+    name: dev
+    url: https://$CI_REGISTRY
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "dev"'
+      when: on_success
+    - when: never
+  needs:
+    - job: build-image
+      artifacts: true
+  script:
+    - *login_registry
+    - echo "Loading image artifact from build stage"
+    - docker load < image.tar
+    - export SOURCE_IMAGE="$CI_REGISTRY_IMAGE:${CI_COMMIT_SHORT_SHA}"
+    - export BASE_IMAGE="$CI_REGISTRY_IMAGE"
+    - echo "Retagging $SOURCE_IMAGE -> dev"
+    - docker tag "$SOURCE_IMAGE" "$BASE_IMAGE:dev"
+    - echo "Pushing original short SHA tag (already built)"
+    - docker push "$SOURCE_IMAGE" || true  # May already exist in registry
+    - docker push "$BASE_IMAGE:dev"
+    - docker tag "$SOURCE_IMAGE" "$BASE_IMAGE:latest" && docker push "$BASE_IMAGE:latest"

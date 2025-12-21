@@ -1,0 +1,14 @@
+module Value
+{
+  struct Msg {
+    @key
+    long messageID;
+    float value;
+  };
+  // Added string variant for interactive publisher
+  struct StringMsg {
+    @key
+    long messageID;
+    string value;
+  };
+};

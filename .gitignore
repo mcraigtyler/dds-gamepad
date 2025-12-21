@@ -1,0 +1,49 @@
+# Build and IDE files
+build/
+*.exe
+*.obj
+*.log
+*.tlog
+*.user
+*.filters
+*.sln
+*.vcxproj
+*.vcxproj.*
+x64/
+Debug/
+Release/
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Docs files
+docs/html
+docs/latex
+doc/data
+
+# VS Code
+.vs
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Misc
+*.swp
+*.bak
+*.tmp
+
+# Jetbrains
+.idea
+
+external/*/
+# Allow tracking of specific submodule(s) inside external despite blanket ignore
+!external/vcpkg/
+install/
+
