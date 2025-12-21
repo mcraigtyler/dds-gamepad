@@ -1,0 +1,14 @@
+dds:
+  topic: "vehicle.throttle_position"
+  type: "Value::Msg"
+  idl_file: "idl/Value.idl"
+  domain_id: 0
+
+mapping:
+  - name: throttle
+    id: 1
+    field: value
+    to: axis:right_trigger
+    scale: 1.0
+    deadzone: 0.05
+    invert: false
