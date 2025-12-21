@@ -32,9 +32,38 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 
 ## Run DDS Gamepad
 
-The main `dds-boilerplate` executable subscribes to a DDS topic carrying `Value::Msg` samples. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the Xbox 360 right trigger range (`0` to `255`).
+The main `dds-gamepad` executable reads every YAML file in a config folder. Each config defines one DDS topic and a single mapping rule. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the target control range.
 
-`.\install\boilerplate-dds\bin\dds-boilerplate.exe <dds_topic> [domain_id]`
+`.\install\boilerplate-dds\bin\dds-gamepad.exe <config_dir> [domain_id]`
+
+### Example config (one file per topic)
+
+```yaml
+dds:
+  topic: "vehicle.throttle"
+  type: "Value::Msg"
+  idl_file: "idl/Value.idl"
+  domain_id: 0
+
+mapping:
+  - name: throttle
+    id: 1
+    field: value
+    to: axis:right_trigger
+    scale: 1.0
+    deadzone: 0.05
+    invert: false
+```
+
+### Mapping notes
+
+- Place one YAML file per DDS topic in the config directory.
+- Each config must include exactly one mapping entry.
+- `id` matches `Value::Msg::messageID` values coming from DDS.
+- `field` currently supports `value`.
+- `to` supports `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`.
+- `scale` is applied before `deadzone` and `invert`.
+- `invert` flips axis direction for sticks or maps triggers as `1.0 - value`.
 
 ## ViGEm Sanity Check
 

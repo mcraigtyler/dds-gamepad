@@ -16,6 +16,10 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     include(${CMAKE_SOURCE_DIR}/external/vcpkg/scripts/buildsystems/vcpkg.cmake)
 endif()
 
+find_package(yaml-cpp CONFIG REQUIRED)
+
+include(FetchContent)
+
 set(IDL_LIB cyclonedds_lib)
 set(IDL_FILES
         "./idl/Value.idl"
@@ -31,6 +35,8 @@ set(EXE_HEADERS
 )
 set(EXE_SOURCES
         src/main.cpp
+        src/config/ConfigLoader.cpp
+        src/mapper/MappingEngine.cpp
 )
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
@@ -38,7 +44,8 @@ target_link_libraries(${EXE_NAME}
     PRIVATE
         ${IDL_LIB}
         CycloneDDS::ddsc
-        CycloneDDS-CXX::ddscxx)
+        CycloneDDS-CXX::ddscxx
+        yaml-cpp::yaml-cpp)
 if(WIN32)
     target_compile_definitions(${EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
 endif()
@@ -49,8 +56,6 @@ target_include_directories(${EXE_NAME} PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
 
 if(WIN32)
-    include(FetchContent)
-
     set(VIGEMCLIENT_SOURCE_DIR "" CACHE PATH "Optional local path to ViGEmClient source")
     if(VIGEMCLIENT_SOURCE_DIR)
         add_subdirectory(${VIGEMCLIENT_SOURCE_DIR} ${CMAKE_BINARY_DIR}/vigemclient)
