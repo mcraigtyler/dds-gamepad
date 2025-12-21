@@ -72,9 +72,9 @@ Example mapping snippet
 
 ```yaml
 dds:
-  topic: "Gamepad_Analog"
+  topic: "vehicle.throttle_position"
   type: "Gamepad_Analog"
-  idl_file: "idl/gamepad.idl"
+  idl_file: "idl/Value.idl"
 
 mapping:
   - name: throttle

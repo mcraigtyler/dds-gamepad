@@ -29,18 +29,18 @@
     - [x] 2.1 Update the DDS loop to consume `Value::Msg` and scale `value` into the right trigger range.
     - [x] 2.2 Wire the DDS read loop to the ViGEm wrapper to update the virtual gamepad on each message.
     - [x] 2.3 Add a small integration harness or mode to replay sample values for manual validation.
-- [ ] 3.0 Read Value.idl messages from Topic and convert to Throttle inputs
-    - [ ] 3.1 Confirm command-line topic argument handling in `src/main.cpp` and fail fast if missing/invalid.
-    - [ ] 3.2 Subscribe to the provided DDS topic for `Value::Msg` and read incoming samples in the main loop.
-    - [ ] 3.3 Remove existing publisher in main, it is no longer needed from the boilerplate.
-    - [ ] 3.4 Define the expected DDS value range and add a scaling + clamp step to map into the gamepad right trigger range. Incoming DDS messages will have a value range of 0 to 1 for throttle position.
-    - [ ] 3.5 Replace the 3-second emulated trigger cycle with DDS-driven trigger updates.
-    - [ ] 3.6 Add minimal logging or console output to verify incoming values and resulting trigger output during manual testing.
+- [x] 3.0 Read Value.idl messages from Topic and convert to Throttle inputs
+    - [x] 3.1 Confirm command-line topic argument handling in `src/main.cpp` and fail fast if missing/invalid.
+    - [x] 3.2 Subscribe to the provided DDS topic for `Value::Msg` and read incoming samples in the main loop.
+    - [x] 3.3 Remove existing publisher in main, it is no longer needed from the boilerplate.
+    - [x] 3.4 Define the expected DDS value range and add a scaling + clamp step to map into the gamepad right trigger range. Incoming DDS messages will have a value range of 0 to 1 for throttle position.
+    - [x] 3.5 Replace the 3-second emulated trigger cycle with DDS-driven trigger updates.
+    - [x] 3.6 Add minimal logging or console output to verify incoming values and resulting trigger output during manual testing.
 
 - [ ] 4.0 Add YAML-driven mapping configuration
     - [ ] 4.1 Define the YAML schema for DDS topic + mapping entries (per PRD) and add validation.
     - [ ] 4.2 Implement `ConfigLoader` to parse config files and produce mapping definitions.
-    - [ ] 4.3 Extend mapping to support buttons, axes, triggers, scale, deadzone, and invert.
+    - [ ] 4.3 Extend mapping to support steering axes, triggers, scale, deadzone, and invert.
 - [ ] 5.0 Structure the application for maintainability and testing
     - [ ] 5.1 Split runtime into modules (`dds/`, `mapper/`, `emulator/`, `config/`, `app/`).
     - [ ] 5.2 Implement `MappingEngine` as pure logic returning a `GamepadState` for easy unit testing.
