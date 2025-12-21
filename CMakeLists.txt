@@ -22,7 +22,7 @@ set(IDL_FILES
 )
 idlcxx_generate(TARGET ${IDL_LIB} FILES ${IDL_FILES} WARNINGS no-implicit-extensibility)
 
-set(EXE_NAME dds-boilerplate)
+set(EXE_NAME dds-gamepad)
 set(IDL_HEADERS
         ${CMAKE_CURRENT_BINARY_DIR}/Value.hpp
 )
@@ -84,6 +84,8 @@ if(WIN32)
     add_executable(vigem_sanity src/vigem_sample.cpp)
     target_link_libraries(vigem_sanity PRIVATE vigem_wrapper)
     target_compile_definitions(vigem_sanity PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+
+    target_link_libraries(${EXE_NAME} PRIVATE vigem_wrapper)
 endif()
 
 # Embed runtime library search paths so installed binary finds CycloneDDS libs without LD_LIBRARY_PATH.

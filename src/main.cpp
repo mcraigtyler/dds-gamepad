@@ -1,5 +1,7 @@
 ﻿// main.cpp
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -8,29 +10,46 @@
 #include "dds_includes.h"
 #include "Value.hpp"
 
+#ifdef _WIN32
+#include "emulator/VigemClient.h"
+#endif
+
 namespace {
 void print_usage(const char* exe)
 {
-    std::cerr << "Usage: " << exe << " <sub_topic> <pub_topic> [domain_id]" << std::endl;
+    std::cerr << "Usage: " << exe << " <sub_topic> [domain_id]" << std::endl;
+}
+
+uint8_t scale_to_trigger(float value)
+{
+    const float clamped = std::clamp(value, 0.0f, 1.0f);
+    return static_cast<uint8_t>(std::lround(clamped * 255.0f));
 }
 }
 
 int main(int argc, char* argv[])
 {
-    if (argc < 3) {
+    if (argc < 2) {
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
 
     const std::string sub_topic_name = argv[1];
-    const std::string pub_topic_name = argv[2];
+    if (sub_topic_name.empty()) {
+        std::cerr << "Sub topic name must not be empty." << std::endl;
+        return EXIT_FAILURE;
+    }
 
     int domain_id = 0;
-    if (argc >= 4) {
+    if (argc >= 3) {
         try {
-            domain_id = std::stoi(argv[3]);
+            size_t parsed = 0;
+            domain_id = std::stoi(argv[2], &parsed);
+            if (parsed != std::string(argv[2]).size() || domain_id < 0) {
+                throw std::invalid_argument("domain_id");
+            }
         } catch (const std::exception&) {
-            std::cerr << "Invalid domain_id: " << argv[3] << std::endl;
+            std::cerr << "Invalid domain_id: " << argv[2] << std::endl;
             return EXIT_FAILURE;
         }
     }
@@ -38,38 +57,46 @@ int main(int argc, char* argv[])
     dds::domain::DomainParticipant participant(domain_id);
 
     dds::topic::Topic<Value::Msg> sub_topic(participant, sub_topic_name);
-    dds::topic::Topic<Value::Msg> pub_topic(participant, pub_topic_name);
 
     dds::sub::Subscriber subscriber(participant);
-    dds::pub::Publisher publisher(participant);
 
     dds::sub::DataReader<Value::Msg> reader(subscriber, sub_topic);
-    dds::pub::DataWriter<Value::Msg> writer(publisher, pub_topic);
 
-    std::cout << "Subscribing to '" << sub_topic_name << "', publishing to '" << pub_topic_name
-              << "' (domain " << domain_id << ")" << std::endl;
+#ifdef _WIN32
+    emulator::VigemClient gamepad;
+    if (!gamepad.Connect()) {
+        std::cerr << "Failed to connect to ViGEm: " << gamepad.LastError() << std::endl;
+        return EXIT_FAILURE;
+    }
+    if (!gamepad.AddX360Controller()) {
+        std::cerr << "Failed to add Xbox 360 controller: " << gamepad.LastError() << std::endl;
+        return EXIT_FAILURE;
+    }
+#else
+    std::cout << "ViGEm is only available on Windows; DDS values will be logged only."
+              << std::endl;
+#endif
 
-    uint32_t message_id = 0;
-    auto next_pub = std::chrono::steady_clock::now();
+    std::cout << "Subscribing to '" << sub_topic_name << "' (domain " << domain_id << ")"
+              << std::endl;
 
     while (true) {
-        const auto now = std::chrono::steady_clock::now();
-        if (now >= next_pub) {
-            Value::Msg msg;
-            msg.messageID(static_cast<long>(message_id));
-            msg.value(static_cast<float>(message_id));
-            writer.write(msg);
-            ++message_id;
-            next_pub = now + std::chrono::seconds(1);
-        }
-
         auto samples = reader.take();
         for (const auto& s : samples) {
             if (!s.info().valid()) {
                 continue;
             }
+            const float raw_value = s.data().value();
+            const uint8_t trigger_value = scale_to_trigger(raw_value);
+#ifdef _WIN32
+            if (!gamepad.UpdateRightTrigger(trigger_value)) {
+                std::cerr << "Failed to update right trigger: " << gamepad.LastError()
+                          << std::endl;
+            }
+#endif
             std::cout << "rx messageID=" << s.data().messageID()
-                      << " value=" << s.data().value() << std::endl;
+                      << " value=" << raw_value
+                      << " -> trigger=" << static_cast<int>(trigger_value) << std::endl;
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(50));

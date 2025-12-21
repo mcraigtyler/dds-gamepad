@@ -30,6 +30,14 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 
 `.\install\simple-dds\bin\simple-sim.exe --topics .\install\simple-dds\config\input`
 
+## Run DDS Gamepad
+
+`dds-gamepad` subscribes to a single DDS topic containing `Value::Msg` samples. The `value` field is expected to be in the range `0.0` to `1.0`, and it is scaled/clamped into the Xbox 360 right trigger range (0-255).
+
+```
+.\install\simple-dds\bin\dds-gamepad.exe <sub_topic> [domain_id]
+```
+
 ## ViGEm Sanity Check
 
 The `vigem_sanity` executable creates a virtual Xbox 360 controller and sets the right trigger to a fixed value for a few seconds. Ensure the ViGEmBus driver is installed, then run:
