@@ -22,13 +22,16 @@ include(FetchContent)
 
 set(IDL_LIB cyclonedds_lib)
 set(IDL_FILES
+        "./idl/Common.idl"
+        "./idl/Gamepad.idl"
+        "./idl/Standard_types.idl"
         "./idl/Value.idl"
 )
 idlcxx_generate(TARGET ${IDL_LIB} FILES ${IDL_FILES} WARNINGS no-implicit-extensibility)
 
 set(EXE_NAME dds-gamepad)
 set(IDL_HEADERS
-        ${CMAKE_CURRENT_BINARY_DIR}/Value.hpp
+        ${CMAKE_CURRENT_BINARY_DIR}/Gamepad.hpp
 )
 set(EXE_HEADERS
         src/dds_includes.h

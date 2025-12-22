@@ -1,9 +1,11 @@
 ﻿// main.cpp
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <variant>
 #include <vector>
 
 #ifdef _WIN32
@@ -13,9 +15,70 @@
 #include "config/ConfigLoader.h"
 #include "dds_includes.h"
 #include "mapper/MappingEngine.h"
-#include "Value.hpp"
+#include "Gamepad.hpp"
 
 namespace {
+enum class TopicType {
+    GamepadAnalog,
+    StickTwoAxis
+};
+
+TopicType ParseTopicType(const std::string& type) {
+    if (type == "Gamepad::Gamepad_Analog" || type == "Gamepad_Analog") {
+        return TopicType::GamepadAnalog;
+    }
+    if (type == "Gamepad::Stick_TwoAxis" || type == "Stick_TwoAxis") {
+        return TopicType::StickTwoAxis;
+    }
+
+    throw std::runtime_error("Unsupported DDS type '" + type +
+                             "'. Expected Gamepad::Gamepad_Analog or Gamepad::Stick_TwoAxis.");
+}
+
+dds::sub::qos::DataReaderQos MakeReaderQos(const dds::sub::Subscriber& subscriber) {
+    // If the publisher writes multiple updates back-to-back for what are
+    // logically different controls (e.g., brake + throttle) but the keyed
+    // field is not set correctly, DDS may treat them as the same instance and
+    // KeepLast(1) will drop earlier samples. Keep a small history depth to
+    // avoid losing those updates.
+    auto qos = subscriber.default_datareader_qos();
+    qos << dds::core::policy::History::KeepLast(16);
+    return qos;
+}
+
+std::string FormatBusId(const Common::BusIdentifier_t& id) {
+    std::ostringstream out;
+    out << id.role() << ":" << id.sub_role();
+    return out.str();
+}
+
+// Resolve the logical `role` value from message payload. Some IDL variants
+// place the BusIdentifier in `id` while others use `another_id`. Prefer a
+// non-zero role value when available.
+template <typename T>
+int ResolveRoleFromData(const T& data) {
+    int role = 0;
+    // primary id field
+    role = data.id().role();
+    if (role != 0) return role;
+    // fallback to alternate id field present on some IDL structs
+    role = data.another_id().role();
+    return role;
+}
+
+template <typename T>
+const Common::BusIdentifier_t& ResolveBusIdFromData(const T& data) {
+    const auto& primary = data.id();
+    if (primary.role() != 0 || primary.sub_role() != 0) {
+        return primary;
+    }
+    const auto& alternate = data.another_id();
+    if (alternate.role() != 0 || alternate.sub_role() != 0) {
+        return alternate;
+    }
+    return primary;
+}
+
 void print_usage(const char* exe)
 {
     std::cerr << "Usage: " << exe << " <config_dir> [domain_id]" << std::endl;
@@ -37,6 +100,180 @@ int ResolveDomainId(const std::vector<config::AppConfig>& configs) {
     }
     return domain_id;
 }
+
+struct AnalogHandler {
+    std::string name;
+    dds::topic::Topic<Gamepad::Gamepad_Analog> topic;
+    dds::sub::DataReader<Gamepad::Gamepad_Analog> reader;
+    mapper::MappingEngine mapping_engine;
+
+    AnalogHandler(dds::domain::DomainParticipant& participant,
+                  dds::sub::Subscriber& subscriber,
+                  std::string topic_name,
+                  mapper::MappingEngine engine)
+        : name(std::move(topic_name)),
+          topic(participant, name),
+                    reader(subscriber, topic, MakeReaderQos(subscriber)),
+          mapping_engine(std::move(engine)) {}
+};
+
+struct StickHandler {
+    std::string name;
+    dds::topic::Topic<Gamepad::Stick_TwoAxis> topic;
+    dds::sub::DataReader<Gamepad::Stick_TwoAxis> reader;
+    mapper::MappingEngine mapping_engine;
+
+    StickHandler(dds::domain::DomainParticipant& participant,
+                 dds::sub::Subscriber& subscriber,
+                 std::string topic_name,
+                 mapper::MappingEngine engine)
+        : name(std::move(topic_name)),
+          topic(participant, name),
+                    reader(subscriber, topic, MakeReaderQos(subscriber)),
+          mapping_engine(std::move(engine)) {}
+};
+
+#ifdef _WIN32
+bool ProcessAnalogSamples(AnalogHandler& handler,
+                          mapper::GamepadState& state,
+                          emulator::VigemClient& client) {
+    auto samples = handler.reader.take();
+    for (const auto& s : samples) {
+        if (!s.info().valid()) {
+            continue;
+        }
+        const auto& data = s.data();
+        const int message_id = ResolveRoleFromData(data);
+        const float raw_value = static_cast<float>(data.value());
+        std::cout << "rx_raw topic=" << handler.name
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                  << " value=" << raw_value << std::endl;
+        if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
+            continue;
+        }
+        if (!client.UpdateState(state)) {
+            std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
+            return false;
+        }
+        std::cout << "rx topic=" << handler.name
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                  << " value=" << raw_value
+                  << " -> LT=" << static_cast<int>(state.left_trigger)
+                  << " RT=" << static_cast<int>(state.right_trigger)
+                  << " LX=" << state.left_stick_x
+                  << " LY=" << state.left_stick_y
+                  << " RX=" << state.right_stick_x
+                  << " RY=" << state.right_stick_y
+                  << std::endl;
+    }
+    return true;
+}
+
+bool ProcessStickSamples(StickHandler& handler,
+                         mapper::GamepadState& state,
+                         emulator::VigemClient& client) {
+    auto samples = handler.reader.take();
+    for (const auto& s : samples) {
+        if (!s.info().valid()) {
+            continue;
+        }
+        const auto& data = s.data();
+        const int message_id = ResolveRoleFromData(data);
+        const float raw_x = static_cast<float>(data.x());
+        const float raw_y = static_cast<float>(data.y());
+        std::cout << "rx_raw topic=" << handler.name
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                  << " x=" << raw_x
+                  << " y=" << raw_y << std::endl;
+        bool updated = handler.mapping_engine.Apply("x", message_id, raw_x, state);
+        updated = handler.mapping_engine.Apply("y", message_id, raw_y, state) || updated;
+        if (!updated) {
+            continue;
+        }
+        if (!client.UpdateState(state)) {
+            std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
+            return false;
+        }
+        std::cout << "rx topic=" << handler.name
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                  << " x=" << raw_x
+                  << " y=" << raw_y
+                  << " -> LT=" << static_cast<int>(state.left_trigger)
+                  << " RT=" << static_cast<int>(state.right_trigger)
+                  << " LX=" << state.left_stick_x
+                  << " LY=" << state.left_stick_y
+                  << " RX=" << state.right_stick_x
+                  << " RY=" << state.right_stick_y
+                  << std::endl;
+    }
+    return true;
+}
+#else
+bool ProcessAnalogSamples(AnalogHandler& handler,
+                          mapper::GamepadState& state) {
+    auto samples = handler.reader.take();
+    for (const auto& s : samples) {
+        if (!s.info().valid()) {
+            continue;
+        }
+        const auto& data = s.data();
+        const int message_id = ResolveRoleFromData(data);
+        const float raw_value = static_cast<float>(data.value());
+        std::cout << "rx_raw topic=" << handler.name
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                  << " value=" << raw_value << std::endl;
+        if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
+            continue;
+        }
+        std::cout << "rx topic=" << handler.name
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                  << " value=" << raw_value
+                  << " -> LT=" << static_cast<int>(state.left_trigger)
+                  << " RT=" << static_cast<int>(state.right_trigger)
+                  << " LX=" << state.left_stick_x
+                  << " LY=" << state.left_stick_y
+                  << " RX=" << state.right_stick_x
+                  << " RY=" << state.right_stick_y
+                  << std::endl;
+    }
+    return true;
+}
+
+bool ProcessStickSamples(StickHandler& handler,
+                         mapper::GamepadState& state) {
+    auto samples = handler.reader.take();
+    for (const auto& s : samples) {
+        if (!s.info().valid()) {
+            continue;
+        }
+        const auto& data = s.data();
+        const int message_id = ResolveRoleFromData(data);
+        const float raw_x = static_cast<float>(data.x());
+        const float raw_y = static_cast<float>(data.y());
+        std::cout << "rx_raw topic=" << handler.name
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                  << " x=" << raw_x
+                  << " y=" << raw_y << std::endl;
+        bool updated = handler.mapping_engine.Apply("x", message_id, raw_x, state);
+        updated = handler.mapping_engine.Apply("y", message_id, raw_y, state) || updated;
+        if (!updated) {
+            continue;
+        }
+        std::cout << "rx topic=" << handler.name
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                  << " x=" << raw_x
+                  << " y=" << raw_y
+                  << " -> LT=" << static_cast<int>(state.left_trigger)
+                  << " RT=" << static_cast<int>(state.right_trigger)
+                  << " LX=" << state.left_stick_x
+                  << " LY=" << state.left_stick_y
+                  << " RX=" << state.right_stick_x
+                  << " RY=" << state.right_stick_y
+                  << std::endl;
+    }
+    return true;
+}
+#endif
 }
 
 int main(int argc, char* argv[])
@@ -89,68 +326,62 @@ int main(int argc, char* argv[])
     dds::domain::DomainParticipant participant(domain_id);
     dds::sub::Subscriber subscriber(participant);
 
-    struct TopicHandler {
-        std::string name;
-        dds::topic::Topic<Value::Msg> topic;
-        dds::sub::DataReader<Value::Msg> reader;
-        mapper::MappingEngine mapping_engine;
-
-        TopicHandler(dds::domain::DomainParticipant& participant,
-                     dds::sub::Subscriber& subscriber,
-                     std::string topic_name,
-                     mapper::MappingEngine engine)
-            : name(std::move(topic_name)),
-              topic(participant, name),
-              reader(subscriber, topic),
-              mapping_engine(std::move(engine)) {}
-    };
-
+    using TopicHandler = std::variant<AnalogHandler, StickHandler>;
     std::vector<TopicHandler> handlers;
     handlers.reserve(configs.size());
     for (const auto& config : configs) {
         std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << domain_id << ")"
                   << std::endl;
-        handlers.emplace_back(participant,
-                              subscriber,
-                              config.dds.topic,
-                              mapper::MappingEngine(config.mappings));
+        switch (ParseTopicType(config.dds.type)) {
+            case TopicType::GamepadAnalog:
+                handlers.emplace_back(AnalogHandler(participant,
+                                                    subscriber,
+                                                    config.dds.topic,
+                                                    mapper::MappingEngine(config.mappings)));
+                break;
+            case TopicType::StickTwoAxis:
+                handlers.emplace_back(StickHandler(participant,
+                                                   subscriber,
+                                                   config.dds.topic,
+                                                   mapper::MappingEngine(config.mappings)));
+                break;
+        }
     }
 
     mapper::GamepadState state;
 
     while (true) {
         for (auto& handler : handlers) {
-            auto samples = handler.reader.take();
-            for (const auto& s : samples) {
-                if (!s.info().valid()) {
-                    continue;
-                }
-                const int message_id = s.data().messageID();
-                const float raw_value = s.data().value();
-                // Always log raw received samples so we can diagnose mapping mismatches
-                std::cout << "rx_raw topic=" << handler.name
-                          << " messageID=" << message_id
-                          << " value=" << raw_value << std::endl;
-                if (!handler.mapping_engine.Apply(message_id, raw_value, state)) {
-                    continue;
+#ifdef _WIN32
+            struct HandlerVisitor {
+                mapper::GamepadState& state;
+                emulator::VigemClient& client;
+
+                bool operator()(AnalogHandler& topic_handler) const {
+                    return ProcessAnalogSamples(topic_handler, state, client);
                 }
 
-#ifdef _WIN32
-                if (!client.UpdateState(state)) {
-                    std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
-                    return EXIT_FAILURE;
+                bool operator()(StickHandler& topic_handler) const {
+                    return ProcessStickSamples(topic_handler, state, client);
                 }
+            };
+            bool ok = std::visit(HandlerVisitor{state, client}, handler);
+#else
+            struct HandlerVisitor {
+                mapper::GamepadState& state;
+
+                bool operator()(AnalogHandler& topic_handler) const {
+                    return ProcessAnalogSamples(topic_handler, state);
+                }
+
+                bool operator()(StickHandler& topic_handler) const {
+                    return ProcessStickSamples(topic_handler, state);
+                }
+            };
+            bool ok = std::visit(HandlerVisitor{state}, handler);
 #endif
-                std::cout << "rx topic=" << handler.name
-                          << " messageID=" << message_id
-                          << " value=" << raw_value
-                          << " -> LT=" << static_cast<int>(state.left_trigger)
-                          << " RT=" << static_cast<int>(state.right_trigger)
-                          << " LX=" << state.left_stick_x
-                          << " LY=" << state.left_stick_y
-                          << " RX=" << state.right_stick_x
-                          << " RY=" << state.right_stick_y
-                          << std::endl;
+            if (!ok) {
+                return EXIT_FAILURE;
             }
         }
 

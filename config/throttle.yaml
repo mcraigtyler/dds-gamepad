@@ -1,14 +1,21 @@
 dds:
-  topic: "vehicle.throttle_position"
-  type: "Value::Msg"
-  idl_file: "idl/Value.idl"
+  topic: "Gamepad_Analog"
+  type: "Gamepad::Gamepad_Analog"
+  idl_file: "idl/Gamepad.idl"
   domain_id: 0
 
 mapping:
   - name: throttle
-    id: 1
+    id: 2
     field: value
     to: axis:right_trigger
+    scale: 1.0
+    deadzone: 0.05
+    invert: false
+  - name: brake
+    id: 1
+    field: value
+    to: axis:left_trigger
     scale: 1.0
     deadzone: 0.05
     invert: false
