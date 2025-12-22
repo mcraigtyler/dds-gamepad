@@ -42,7 +42,7 @@ Notes
 Tasks
 
 - [ ] 1.0 Documentation updates (first step)
-    - [ ] 1.1 Create `docs/work/Gamepad-IDL-Mirgration.md` (this file).
+    - [x] 1.1 Create `docs/work/Gamepad-IDL-Mirgration.md` (this file).
     - [ ] 1.2 Update `docs/PRD.md` to reference `idl/crte_idl/Gamepad.idl` and document type usage (`Gamepad_Analog` for Throttle/Brake, `Stick_TwoAxis.x` for Steering).
     - [ ] 1.3 Update `README.md` examples and usage to show the new YAML mapping and example config snippet.
 - [ ] 2.0 YAML config updates
