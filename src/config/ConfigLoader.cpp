@@ -10,6 +10,51 @@
 
 namespace config {
 namespace {
+enum class MessageType {
+    Unknown,
+    ValueMsg,
+    GamepadAnalog,
+    StickTwoAxis
+};
+
+MessageType ParseMessageType(const std::string& value) {
+    if (value.empty()) {
+        return MessageType::Unknown;
+    }
+    if (value == "Value::Msg" || value == "Value.Msg") {
+        return MessageType::ValueMsg;
+    }
+    if (value == "Gamepad::Gamepad_Analog" || value == "Gamepad_Analog") {
+        return MessageType::GamepadAnalog;
+    }
+    if (value == "Gamepad::Stick_TwoAxis" || value == "Stick_TwoAxis") {
+        return MessageType::StickTwoAxis;
+    }
+
+    throw std::runtime_error("Unsupported DDS type '" + value +
+                             "'. Expected Gamepad::Gamepad_Analog or Gamepad::Stick_TwoAxis.");
+}
+
+std::string NormalizeFieldName(const std::string& value) {
+    const auto pos = value.rfind('.');
+    if (pos == std::string::npos) {
+        return value;
+    }
+    return value.substr(pos + 1);
+}
+
+bool IsTriggerTarget(mapper::ControlTarget target) {
+    return target == mapper::ControlTarget::LeftTrigger ||
+           target == mapper::ControlTarget::RightTrigger;
+}
+
+bool IsStickTarget(mapper::ControlTarget target) {
+    return target == mapper::ControlTarget::LeftStickX ||
+           target == mapper::ControlTarget::LeftStickY ||
+           target == mapper::ControlTarget::RightStickX ||
+           target == mapper::ControlTarget::RightStickY;
+}
+
 mapper::ControlTarget ParseTarget(const std::string& value) {
     if (value == "axis:left_trigger") {
         return mapper::ControlTarget::LeftTrigger;
@@ -96,6 +141,8 @@ AppConfig ConfigLoader::Load(const std::string& path) {
         throw std::runtime_error("Missing required 'mapping' list in config.");
     }
 
+    const MessageType message_type = ParseMessageType(config.dds.type);
+
     for (const auto& entry : mappings_node) {
         if (!entry.IsMap()) {
             throw std::runtime_error("Each mapping entry must be a map.");
@@ -104,7 +151,8 @@ AppConfig ConfigLoader::Load(const std::string& path) {
         mapper::MappingDefinition mapping;
         mapping.name = RequireString(entry, "name");
         mapping.id = RequireInt(entry, "id");
-        mapping.field = RequireString(entry, "field");
+        const std::string raw_field = RequireString(entry, "field");
+        mapping.field = NormalizeFieldName(raw_field);
         mapping.target = ParseTarget(RequireString(entry, "to"));
         mapping.scale = OptionalFloat(entry, "scale", 1.0f);
         mapping.deadzone = OptionalFloat(entry, "deadzone", 0.0f);
@@ -119,11 +167,48 @@ AppConfig ConfigLoader::Load(const std::string& path) {
             mapping.has_input_range = true;
         }
 
-        if (mapping.field != "value") {
+        if (message_type == MessageType::GamepadAnalog) {
+            if (mapping.field != "value") {
+                std::ostringstream message;
+                message << "Unsupported field '" << raw_field
+                        << "' in mapping '" << mapping.name
+                        << "'. Expected field: value.";
+                throw std::runtime_error(message.str());
+            }
+            if (!IsTriggerTarget(mapping.target)) {
+                std::ostringstream message;
+                message << "Unsupported target for Gamepad_Analog mapping '"
+                        << mapping.name << "'. Expected a trigger axis target.";
+                throw std::runtime_error(message.str());
+            }
+        } else if (message_type == MessageType::StickTwoAxis) {
+            if (mapping.field != "x" && mapping.field != "y") {
+                std::ostringstream message;
+                message << "Unsupported field '" << raw_field
+                        << "' in mapping '" << mapping.name
+                        << "'. Expected field: x or y.";
+                throw std::runtime_error(message.str());
+            }
+            if (!IsStickTarget(mapping.target)) {
+                std::ostringstream message;
+                message << "Unsupported target for Stick_TwoAxis mapping '"
+                        << mapping.name << "'. Expected a stick axis target.";
+                throw std::runtime_error(message.str());
+            }
+        } else if (message_type == MessageType::ValueMsg) {
+            if (mapping.field != "value") {
+                std::ostringstream message;
+                message << "Unsupported field '" << raw_field
+                        << "' in mapping '" << mapping.name
+                        << "'. Expected field: value.";
+                throw std::runtime_error(message.str());
+            }
+        } else if (mapping.field != "value" && mapping.field != "x" &&
+                   mapping.field != "y") {
             std::ostringstream message;
-            message << "Unsupported field '" << mapping.field
+            message << "Unsupported field '" << raw_field
                     << "' in mapping '" << mapping.name
-                    << "'. Expected field: value.";
+                    << "'. Expected field: value, x, or y.";
             throw std::runtime_error(message.str());
         }
         if (mapping.deadzone < 0.0f || mapping.deadzone > 1.0f) {
@@ -136,8 +221,8 @@ AppConfig ConfigLoader::Load(const std::string& path) {
         config.mappings.push_back(mapping);
     }
 
-    if (config.mappings.size() != 1U) {
-        throw std::runtime_error("Config must include exactly one mapping entry.");
+    if (config.mappings.empty()) {
+        throw std::runtime_error("Config must include at least one mapping entry.");
     }
 
     return config;

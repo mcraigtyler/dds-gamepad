@@ -45,22 +45,22 @@ Tasks
     - [x] 1.1 Create `docs/work/Gamepad-IDL-Mirgration.md` (this file).
     - [x] 1.2 Update `docs/PRD.md` to reference `idl/Gamepad.idl` and document type usage (`Gamepad_Analog` for Throttle/Brake, `Stick_TwoAxis.x` for Steering).
     - [x] 1.3 Update `README.md` examples and usage to show the new YAML mapping and example config snippet.
-- [ ] 2.0 YAML config updates
-    - [ ] 2.1 Replace `Value.idl` / `Value::Msg` references in existing config files with `Gamepad.idl` types.
-    - [ ] 2.2 Add example config files demonstrating mappings for Throttle (`Gamepad_Analog`), Brake (`Gamepad_Analog`), and Steering (`Stick_TwoAxis.x`).
-    - [ ] 2.3 Validate configs with the updated `ConfigLoader` once implemented.
-- [ ] 3.0 IDL codegen and build
-    - [ ] 3.1 Add `idl/Gamepad.idl` to the IDL code generation step in CMake.
-    - [ ] 3.2 Ensure generated sources are compiled and linked into the app targets.
-- [ ] 4.0 ConfigLoader changes
-    - [ ] 4.1 Extend parsing to accept `Gamepad_Analog` and `Stick_TwoAxis` message types.
-    - [ ] 4.2 Implement dotted-field access (e.g., `field: x`) and type-specific validation.
-- [ ] 5.0 MappingEngine updates
-    - [ ] 5.1 Map `Gamepad_Analog` values to trigger outputs (throttle/brake). Ensure correct normalization and clamping.
-    - [ ] 5.2 Map `Stick_TwoAxis.x` to steering axis; accept only `x` as input and ignore `y` if absent.
-    - [ ] 5.3 Preserve `scale`, `deadzone`, and `invert` behavior for all mappings.
-- [ ] 6.0 ViGEm wrapper
-    - [ ] 6.1 Confirm `IViGem` still satisfies test needs.
-    - [ ] 6.2 Run `vigem_sanity` to verify controller creation still works after changes.
+- [x] 2.0 YAML config updates
+    - [x] 2.1 Replace `Value.idl` / `Value::Msg` references in existing config files with `Gamepad.idl` types.
+    - [x] 2.2 Add example config files demonstrating mappings for Throttle (`Gamepad_Analog`), Brake (`Gamepad_Analog`), and Steering (`Stick_TwoAxis.x`).
+    - [x] 2.3 Validate configs with the updated `ConfigLoader` once implemented.
+- [x] 3.0 IDL codegen and build
+    - [x] 3.1 Add `idl/Gamepad.idl` to the IDL code generation step in CMake.
+    - [x] 3.2 Ensure generated sources are compiled and linked into the app targets.
+- [x] 4.0 ConfigLoader changes
+    - [x] 4.1 Extend parsing to accept `Gamepad_Analog` and `Stick_TwoAxis` message types.
+    - [x] 4.2 Implement dotted-field access (e.g., `field: x`) and type-specific validation.
+- [x] 5.0 MappingEngine updates
+    - [x] 5.1 Map `Gamepad_Analog` values to trigger outputs (throttle/brake). Ensure correct normalization and clamping.
+    - [x] 5.2 Map `Stick_TwoAxis.x` to steering axis; accept only `x` as input and ignore `y` if absent.
+    - [x] 5.3 Preserve `scale`, `deadzone`, and `invert` behavior for all mappings.
+- [x] 6.0 ViGEm wrapper
+    - [x] 6.1 Confirm `IViGem` still satisfies test needs.
+    - [x] 6.2 Run `vigem_sanity` to verify controller creation still works after changes (requires Windows).
 - [ ] 7.0 Packaging & docs follow-up
     - [ ] 7.1 Update packaging notes in `docs/PRD.md` and `README.md` if build/install artifacts change.

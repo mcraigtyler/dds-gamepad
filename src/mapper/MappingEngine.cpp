@@ -35,13 +35,12 @@ uint8_t TriggerFromNormalized(float value) {
 MappingEngine::MappingEngine(std::vector<MappingDefinition> mappings)
     : mappings_(std::move(mappings)) {}
 
-bool MappingEngine::Apply(int message_id, float value, GamepadState& state) const {
+bool MappingEngine::Apply(const std::string& field, float value, GamepadState& state) const {
     bool updated = false;
     for (const auto& mapping : mappings_) {
-        // Mapping definitions are provided per-topic (one mapping per config file).
-        // The publisher uses a global sequence `messageID`, so matching on
-        // `message_id` prevents mappings from applying. Apply mappings for
-        // every received sample for this topic instead of filtering by id.
+        if (mapping.field != field) {
+            continue;
+        }
 
         // Start with the raw value. If an input range is provided, normalize
         // the raw value into 0..1 (triggers) or -1..1 (sticks). Then apply

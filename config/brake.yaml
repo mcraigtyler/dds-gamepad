@@ -1,7 +1,7 @@
 dds:
   topic: "vehicle.brake_position"
-  type: "Value::Msg"
-  idl_file: "idl/Value.idl"
+  type: "Gamepad::Gamepad_Analog"
+  idl_file: "idl/Gamepad.idl"
   domain_id: 0
 
 mapping:
