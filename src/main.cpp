@@ -127,6 +127,10 @@ int main(int argc, char* argv[])
                 }
                 const int message_id = s.data().messageID();
                 const float raw_value = s.data().value();
+                // Always log raw received samples so we can diagnose mapping mismatches
+                std::cout << "rx_raw topic=" << handler.name
+                          << " messageID=" << message_id
+                          << " value=" << raw_value << std::endl;
                 if (!handler.mapping_engine.Apply(message_id, raw_value, state)) {
                     continue;
                 }

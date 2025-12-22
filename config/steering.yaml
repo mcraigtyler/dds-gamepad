@@ -8,7 +8,9 @@ mapping:
   - name: steering
     id: 3
     field: value
-    to: axis:left_x
-    scale: 2.0
+    to: axis:right_x
+    input_min: -110.0
+    input_max: 110.0
+    scale: 1.0
     deadzone: 0.02
     invert: false

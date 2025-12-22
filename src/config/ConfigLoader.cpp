@@ -110,6 +110,15 @@ AppConfig ConfigLoader::Load(const std::string& path) {
         mapping.deadzone = OptionalFloat(entry, "deadzone", 0.0f);
         mapping.invert = OptionalBool(entry, "invert", false);
 
+        // Optional input range normalization fields. If both are present,
+        // treat input values in [input_min,input_max] as the source range
+        // to normalize from.
+        if (entry["input_min"] && entry["input_max"]) {
+            mapping.input_min = entry["input_min"].as<float>();
+            mapping.input_max = entry["input_max"].as<float>();
+            mapping.has_input_range = true;
+        }
+
         if (mapping.field != "value") {
             std::ostringstream message;
             message << "Unsupported field '" << mapping.field
