@@ -74,7 +74,7 @@ Example mapping snippet
 dds:
   topic: "vehicle.throttle_position"
   type: "Gamepad_Analog"
-  idl_file: "idl/Value.idl"
+  idl_file: "idl/Gamepad.idl"
 
 mapping:
   - name: throttle
@@ -84,6 +84,8 @@ mapping:
     scale: 1.0
     deadzone: 0.0
 ```
+
+`Gamepad_Analog` is used for throttle and brake mappings (use the `value` field), and `Stick_TwoAxis.x` is used for steering inputs.
 
 ## Project layout (recommended)
 ```
