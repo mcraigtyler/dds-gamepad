@@ -42,7 +42,7 @@ The main `dds-gamepad` executable reads every YAML file in a config folder. Each
 dds:
   topic: "vehicle.throttle"
   type: "Gamepad_Analog"
-  idl_file: "idl/crte_idl/Gamepad.idl"
+  idl_file: "idl/Gamepad.idl"
   domain_id: 0
 
 mapping:
@@ -61,7 +61,7 @@ Steering example using the `Stick_TwoAxis.x` field:
 dds:
   topic: "vehicle.steering"
   type: "Stick_TwoAxis"
-  idl_file: "idl/crte_idl/Gamepad.idl"
+  idl_file: "idl/Gamepad.idl"
   domain_id: 0
 
 mapping:

@@ -2,7 +2,7 @@
 
 Summary
 
-The project is migrating from `idl/Value.idl` to `idl/crte_idl/Gamepad.idl`. The new IDL defines `Gamepad_Analog` (used for Throttle and Brake) and `Stick_TwoAxis` (used for Steering — we will use the `x` field only). This document describes the required code, config, build, and documentation changes and provides a tasks checklist.
+The project is migrating from `idl/Value.idl` to `idl/Gamepad.idl`. The new IDL defines `Gamepad_Analog` (used for Throttle and Brake) and `Stick_TwoAxis` (used for Steering — we will use the `x` field only). This document describes the required code, config, build, and documentation changes and provides a tasks checklist.
 
 Context and rationale
 
@@ -12,9 +12,9 @@ Context and rationale
 
 Required changes (high-level)
 
-- Documentation: Update `docs/PRD.md` and `README.md` to reference `idl/crte_idl/Gamepad.idl` and to describe that `Gamepad_Analog` maps to throttle/brake and `Stick_TwoAxis.x` maps to steering.
+- Documentation: Update `docs/PRD.md` and `README.md` to reference `idl/Gamepad.idl` and to describe that `Gamepad_Analog` maps to throttle/brake and `Stick_TwoAxis.x` maps to steering.
 - YAML configs: Replace `Value.idl` and `Value::Msg` in config YAMLs with `Gamepad.idl` types. Provide example mappings for throttle (Gamepad_Analog -> `axis:right_trigger`), brake (Gamepad_Analog -> `axis:left_trigger` or similar), and steering (`Stick_TwoAxis.x` -> `axis:left_x`/`axis:left_y` depending on project mapping).
-- Build/IDL codegen: Ensure `idl/crte_idl/Gamepad.idl` is included in the IDL code generation step and generated sources are compiled into the project.
+- Build/IDL codegen: Ensure `idl/Gamepad.idl` is included in the IDL code generation step and generated sources are compiled into the project.
 - ConfigLoader: Update `src/config/ConfigLoader.*` so it validates mapping entries that target `Gamepad_Analog` and `Stick_TwoAxis`, and supports dotted-field access (e.g., `field: x`).
 - MappingEngine: Accept the new types and fields; map `Gamepad_Analog.value` to triggers (apply `scale`, `deadzone`, `invert`) and `Stick_TwoAxis.x` to steering axis (use only `x`, apply `scale`, `deadzone`, `invert`).
 - Tests: Update unit tests in `tests/mapper/` and the integration harness to publish the new message types for automated verification.
@@ -23,7 +23,7 @@ Required changes (high-level)
 
 Relevant Files
 
-- `idl/crte_idl/Gamepad.idl` - New IDL to be used for mappings.
+- `idl/Gamepad.idl` - New IDL to be used for mappings.
 - `docs/PRD.md` - Update to reference the new IDL and mapping choices.
 - `README.md` - Update usage examples and example YAML to use `Gamepad.idl` types.
 - `docs/Tasks.md` - (existing) update or reference; this new document captures the specific migration tasks.
@@ -43,14 +43,14 @@ Tasks
 
 - [x] 1.0 Documentation updates (first step)
     - [x] 1.1 Create `docs/work/Gamepad-IDL-Mirgration.md` (this file).
-    - [x] 1.2 Update `docs/PRD.md` to reference `idl/crte_idl/Gamepad.idl` and document type usage (`Gamepad_Analog` for Throttle/Brake, `Stick_TwoAxis.x` for Steering).
+    - [x] 1.2 Update `docs/PRD.md` to reference `idl/Gamepad.idl` and document type usage (`Gamepad_Analog` for Throttle/Brake, `Stick_TwoAxis.x` for Steering).
     - [x] 1.3 Update `README.md` examples and usage to show the new YAML mapping and example config snippet.
 - [ ] 2.0 YAML config updates
     - [ ] 2.1 Replace `Value.idl` / `Value::Msg` references in existing config files with `Gamepad.idl` types.
     - [ ] 2.2 Add example config files demonstrating mappings for Throttle (`Gamepad_Analog`), Brake (`Gamepad_Analog`), and Steering (`Stick_TwoAxis.x`).
     - [ ] 2.3 Validate configs with the updated `ConfigLoader` once implemented.
 - [ ] 3.0 IDL codegen and build
-    - [ ] 3.1 Add `idl/crte_idl/Gamepad.idl` to the IDL code generation step in CMake.
+    - [ ] 3.1 Add `idl/Gamepad.idl` to the IDL code generation step in CMake.
     - [ ] 3.2 Ensure generated sources are compiled and linked into the app targets.
 - [ ] 4.0 ConfigLoader changes
     - [ ] 4.1 Extend parsing to accept `Gamepad_Analog` and `Stick_TwoAxis` message types.

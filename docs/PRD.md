@@ -74,7 +74,7 @@ Example mapping snippet
 dds:
   topic: "vehicle.throttle_position"
   type: "Gamepad_Analog"
-  idl_file: "idl/crte_idl/Gamepad.idl"
+  idl_file: "idl/Gamepad.idl"
 
 mapping:
   - name: throttle
