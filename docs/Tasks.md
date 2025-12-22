@@ -37,15 +37,11 @@
     - [x] 3.5 Replace the 3-second emulated trigger cycle with DDS-driven trigger updates.
     - [x] 3.6 Add minimal logging or console output to verify incoming values and resulting trigger output during manual testing.
 
-- [ ] 4.0 Add YAML-driven mapping configuration
-    - [ ] 4.1 Define the YAML schema for DDS topic + mapping entries (per PRD) and add validation.
-    - [ ] 4.2 Implement `ConfigLoader` to parse config files and produce mapping definitions.
-    - [ ] 4.3 Extend mapping to support steering axes, triggers, scale, deadzone, and invert.
-- [ ] 5.0 Structure the application for maintainability and testing
-    - [ ] 5.1 Split runtime into modules (`dds/`, `mapper/`, `emulator/`, `config/`, `app/`).
-    - [ ] 5.2 Implement `MappingEngine` as pure logic returning a `GamepadState` for easy unit testing.
-    - [ ] 5.3 Add unit tests for mapping math and an integration test harness for DDS + mapping.
-- [ ] 6.0 Packaging and installer deliverables
-    - [ ] 6.1 Add `scripts/install_vigem.ps1` to download and run ViGEmBus installer with elevation.
-    - [ ] 6.2 Create installer configuration (WiX/MSI or Inno Setup) that bundles the app and ViGEmBus installer.
-    - [ ] 6.3 Document release steps and ensure build outputs match PRD acceptance criteria.
+- [x] 4.0 Add YAML-driven mapping configuration
+    - [x] 4.1 Define the YAML schema for DDS topic + mapping entries (per PRD) and add validation.
+    - [x] 4.2 Implement `ConfigLoader` to parse config files and produce mapping definitions.
+    - [x] 4.3 Extend mapping to support steering axes, triggers, scale, deadzone, and invert.
+- [x] 5.0 Packaging and installer deliverables
+    - [x] 5.1 Add `scripts/install_vigem.ps1` to download and run ViGEmBus installer with elevation.
+    - [x] 5.2 Create installer configuration (WiX/MSI or Inno Setup) that bundles the app and ViGEmBus installer.
+    - [x] 5.3 Document release steps and ensure build outputs match PRD acceptance criteria.

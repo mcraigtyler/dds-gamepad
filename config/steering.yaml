@@ -1,0 +1,16 @@
+dds:
+  topic: "vehicle.steering_position"
+  type: "Value::Msg"
+  idl_file: "idl/Value.idl"
+  domain_id: 0
+
+mapping:
+  - name: steering
+    id: 3
+    field: value
+    to: axis:right_x
+    input_min: -110.0
+    input_max: 110.0
+    scale: 1.0
+    deadzone: 0.02
+    invert: false

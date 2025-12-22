@@ -1,0 +1,14 @@
+dds:
+  topic: "vehicle.brake_position"
+  type: "Value::Msg"
+  idl_file: "idl/Value.idl"
+  domain_id: 0
+
+mapping:
+  - name: brake
+    id: 2
+    field: value
+    to: axis:left_trigger
+    scale: 1.0
+    deadzone: 0.05
+    invert: false

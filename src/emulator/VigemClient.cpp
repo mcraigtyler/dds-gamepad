@@ -142,6 +142,34 @@ bool VigemClient::UpdateRightTrigger(uint8_t value) {
     return true;
 }
 
+bool VigemClient::UpdateState(const mapper::GamepadState& state) {
+    ResetError();
+
+    if (!controller_added_) {
+        SetError("Xbox 360 controller has not been added.");
+        return false;
+    }
+
+    XUSB_REPORT report;
+    XUSB_REPORT_INIT(&report);
+    report.sThumbLX = state.left_stick_x;
+    report.sThumbLY = state.left_stick_y;
+    report.sThumbRX = state.right_stick_x;
+    report.sThumbRY = state.right_stick_y;
+    report.bLeftTrigger = state.left_trigger;
+    report.bRightTrigger = state.right_trigger;
+
+    const auto status = vigem_target_x360_update(static_cast<PVIGEM_CLIENT>(client_),
+                                                 static_cast<PVIGEM_TARGET>(target_),
+                                                 report);
+    if (!VIGEM_SUCCESS(status)) {
+        SetError("vigem_target_x360_update failed: " + StatusToString(status));
+        return false;
+    }
+
+    return true;
+}
+
 std::string VigemClient::LastError() const {
     return last_error_;
 }

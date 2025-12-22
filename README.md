@@ -32,12 +32,86 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 
 ## Run DDS Gamepad
 
-The main `dds-boilerplate` executable subscribes to a DDS topic carrying `Value::Msg` samples. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the Xbox 360 right trigger range (`0` to `255`).
+The main `dds-gamepad` executable reads every YAML file in a config folder. Each config defines one DDS topic and a single mapping rule. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the target control range.
 
-`.\install\boilerplate-dds\bin\dds-boilerplate.exe <dds_topic> [domain_id]`
+`.\install\boilerplate-dds\bin\dds-gamepad.exe <config_dir> [domain_id]`
+
+### Example config (one file per topic)
+
+```yaml
+dds:
+  topic: "vehicle.throttle"
+  type: "Value::Msg"
+  idl_file: "idl/Value.idl"
+  domain_id: 0
+
+mapping:
+  - name: throttle
+    id: 1
+    field: value
+    to: axis:right_trigger
+    scale: 1.0
+    deadzone: 0.05
+    invert: false
+```
+
+### Mapping notes
+
+- Place one YAML file per DDS topic in the config directory.
+- Each config must include exactly one mapping entry.
+- `id` matches `Value::Msg::messageID` values coming from DDS.
+- `field` currently supports `value`.
+- `to` supports `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`.
+- `scale` is applied before `deadzone` and `invert`.
+- `invert` flips axis direction for sticks or maps triggers as `1.0 - value`.
 
 ## ViGEm Sanity Check
 
 The `vigem_sanity` executable creates a virtual Xbox 360 controller and sets the right trigger to a fixed value for a few seconds. Ensure the ViGEmBus driver is installed, then run:
 
 `.\install\simple-dds\bin\vigem_sanity.exe`
+
+## Install
+
+To create a portable installer you can copy to another Windows machine, produce the install tree and zip it. The install tree will include the application binaries, configuration files and any optional installer binaries (Visual C++ redistributable and ViGEmBus) if present in `external/`.
+
+1. Build and run the install target (Release recommended):
+
+```powershell
+cmake --build build --config Release --target install
+```
+
+2. Create a ZIP of the install folder (example from repository root):
+
+```powershell
+Compress-Archive -Path install\dds-gamepad\* -DestinationPath release\dds-gamepad-install.zip -Force
+```
+
+3. Copy the ZIP to the target machine and extract it (e.g. `C:\dds-gamepad`).
+
+4. On the target machine, run the required installers (run as Administrator):
+
+- Install the Visual C++ Redistributable (x64):
+
+```powershell
+.\installers\vc_redist.x64.exe /install /quiet /norestart
+```
+
+- Install the ViGEmBus driver (required for virtual controllers):
+
+```powershell
+.\installers\ViGEmBus_1.22.0_x64_x86_arm64.exe
+```
+
+5. Start the application (example):
+
+```powershell
+cd bin
+.\dds-gamepad.exe ..\config
+```
+
+Notes:
+- If the `installers` folder is missing from the install tree, place the `vc_redist.x64.exe` and ViGEmBus installer in the `installers` folder before running the installers.
+- The app expects Release builds of third-party DLLs (no `*D.dll` debug runtimes) — ship Release artifacts only.
+- Include the `config` folder contents when packaging so `dds-gamepad.exe` can find YAML files describing topics and mappings.
+
