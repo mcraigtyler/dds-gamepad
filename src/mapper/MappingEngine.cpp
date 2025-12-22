@@ -35,10 +35,13 @@ uint8_t TriggerFromNormalized(float value) {
 MappingEngine::MappingEngine(std::vector<MappingDefinition> mappings)
     : mappings_(std::move(mappings)) {}
 
-bool MappingEngine::Apply(const std::string& field, float value, GamepadState& state) const {
+bool MappingEngine::Apply(const std::string& field, int message_id, float value, GamepadState& state) const {
     bool updated = false;
     for (const auto& mapping : mappings_) {
         if (mapping.field != field) {
+            continue;
+        }
+        if (mapping.id != message_id) {
             continue;
         }
 
