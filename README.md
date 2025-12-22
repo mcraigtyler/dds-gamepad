@@ -41,8 +41,8 @@ The main `dds-gamepad` executable reads every YAML file in a config folder. Each
 ```yaml
 dds:
   topic: "vehicle.throttle"
-  type: "Value::Msg"
-  idl_file: "idl/Value.idl"
+  type: "Gamepad_Analog"
+  idl_file: "idl/crte_idl/Gamepad.idl"
   domain_id: 0
 
 mapping:
@@ -55,12 +55,31 @@ mapping:
     invert: false
 ```
 
+Steering example using the `Stick_TwoAxis.x` field:
+
+```yaml
+dds:
+  topic: "vehicle.steering"
+  type: "Stick_TwoAxis"
+  idl_file: "idl/crte_idl/Gamepad.idl"
+  domain_id: 0
+
+mapping:
+  - name: steering
+    id: 2
+    field: x
+    to: axis:left_x
+    scale: 1.0
+    deadzone: 0.05
+    invert: false
+```
+
 ### Mapping notes
 
 - Place one YAML file per DDS topic in the config directory.
 - Each config must include exactly one mapping entry.
-- `id` matches `Value::Msg::messageID` values coming from DDS.
-- `field` currently supports `value`.
+- `id` matches `role_id` values coming from DDS.
+- `field` supports `value` for `Gamepad_Analog` and `x` for `Stick_TwoAxis` (steering uses `x` only).
 - `to` supports `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`.
 - `scale` is applied before `deadzone` and `invert`.
 - `invert` flips axis direction for sticks or maps triggers as `1.0 - value`.
@@ -114,4 +133,3 @@ Notes:
 - If the `installers` folder is missing from the install tree, place the `vc_redist.x64.exe` and ViGEmBus installer in the `installers` folder before running the installers.
 - The app expects Release builds of third-party DLLs (no `*D.dll` debug runtimes) — ship Release artifacts only.
 - Include the `config` folder contents when packaging so `dds-gamepad.exe` can find YAML files describing topics and mappings.
-
