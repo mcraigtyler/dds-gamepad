@@ -105,12 +105,11 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
             continue;
         }
         const auto& data = s.data();
-        const int message_id = data.id().role();
         const float raw_value = static_cast<float>(data.value());
         std::cout << "rx_raw topic=" << handler.name
                   << " id=" << FormatBusId(data.id())
                   << " value=" << raw_value << std::endl;
-        if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
+        if (!handler.mapping_engine.Apply("value", raw_value, state)) {
             continue;
         }
         if (!client.UpdateState(state)) {
@@ -140,15 +139,14 @@ bool ProcessStickSamples(StickHandler& handler,
             continue;
         }
         const auto& data = s.data();
-        const int message_id = data.id().role();
         const float raw_x = static_cast<float>(data.x());
         const float raw_y = static_cast<float>(data.y());
         std::cout << "rx_raw topic=" << handler.name
                   << " id=" << FormatBusId(data.id())
                   << " x=" << raw_x
                   << " y=" << raw_y << std::endl;
-        bool updated = handler.mapping_engine.Apply("x", message_id, raw_x, state);
-        updated = handler.mapping_engine.Apply("y", message_id, raw_y, state) || updated;
+        bool updated = handler.mapping_engine.Apply("x", raw_x, state);
+        updated = handler.mapping_engine.Apply("y", raw_y, state) || updated;
         if (!updated) {
             continue;
         }
@@ -179,12 +177,11 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
             continue;
         }
         const auto& data = s.data();
-        const int message_id = data.id().role();
         const float raw_value = static_cast<float>(data.value());
         std::cout << "rx_raw topic=" << handler.name
                   << " id=" << FormatBusId(data.id())
                   << " value=" << raw_value << std::endl;
-        if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
+        if (!handler.mapping_engine.Apply("value", raw_value, state)) {
             continue;
         }
         std::cout << "rx topic=" << handler.name
@@ -209,15 +206,14 @@ bool ProcessStickSamples(StickHandler& handler,
             continue;
         }
         const auto& data = s.data();
-        const int message_id = data.id().role();
         const float raw_x = static_cast<float>(data.x());
         const float raw_y = static_cast<float>(data.y());
         std::cout << "rx_raw topic=" << handler.name
                   << " id=" << FormatBusId(data.id())
                   << " x=" << raw_x
                   << " y=" << raw_y << std::endl;
-        bool updated = handler.mapping_engine.Apply("x", message_id, raw_x, state);
-        updated = handler.mapping_engine.Apply("y", message_id, raw_y, state) || updated;
+        bool updated = handler.mapping_engine.Apply("x", raw_x, state);
+        updated = handler.mapping_engine.Apply("y", raw_y, state) || updated;
         if (!updated) {
             continue;
         }

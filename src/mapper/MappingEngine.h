@@ -36,7 +36,7 @@ class MappingEngine {
 public:
     explicit MappingEngine(std::vector<MappingDefinition> mappings);
 
-    bool Apply(const std::string& field, int message_id, float value, GamepadState& state) const;
+    bool Apply(const std::string& field, float value, GamepadState& state) const;
 
 private:
     std::vector<MappingDefinition> mappings_;
