@@ -35,10 +35,48 @@ TopicType ParseTopicType(const std::string& type) {
                              "'. Expected Gamepad::Gamepad_Analog or Gamepad::Stick_TwoAxis.");
 }
 
+dds::sub::qos::DataReaderQos MakeReaderQos(const dds::sub::Subscriber& subscriber) {
+    // If the publisher writes multiple updates back-to-back for what are
+    // logically different controls (e.g., brake + throttle) but the keyed
+    // field is not set correctly, DDS may treat them as the same instance and
+    // KeepLast(1) will drop earlier samples. Keep a small history depth to
+    // avoid losing those updates.
+    auto qos = subscriber.default_datareader_qos();
+    qos << dds::core::policy::History::KeepLast(16);
+    return qos;
+}
+
 std::string FormatBusId(const Common::BusIdentifier_t& id) {
     std::ostringstream out;
     out << id.role() << ":" << id.sub_role();
     return out.str();
+}
+
+// Resolve the logical `role` value from message payload. Some IDL variants
+// place the BusIdentifier in `id` while others use `another_id`. Prefer a
+// non-zero role value when available.
+template <typename T>
+int ResolveRoleFromData(const T& data) {
+    int role = 0;
+    // primary id field
+    role = data.id().role();
+    if (role != 0) return role;
+    // fallback to alternate id field present on some IDL structs
+    role = data.another_id().role();
+    return role;
+}
+
+template <typename T>
+const Common::BusIdentifier_t& ResolveBusIdFromData(const T& data) {
+    const auto& primary = data.id();
+    if (primary.role() != 0 || primary.sub_role() != 0) {
+        return primary;
+    }
+    const auto& alternate = data.another_id();
+    if (alternate.role() != 0 || alternate.sub_role() != 0) {
+        return alternate;
+    }
+    return primary;
 }
 
 void print_usage(const char* exe)
@@ -75,7 +113,7 @@ struct AnalogHandler {
                   mapper::MappingEngine engine)
         : name(std::move(topic_name)),
           topic(participant, name),
-          reader(subscriber, topic),
+                    reader(subscriber, topic, MakeReaderQos(subscriber)),
           mapping_engine(std::move(engine)) {}
 };
 
@@ -91,7 +129,7 @@ struct StickHandler {
                  mapper::MappingEngine engine)
         : name(std::move(topic_name)),
           topic(participant, name),
-          reader(subscriber, topic),
+                    reader(subscriber, topic, MakeReaderQos(subscriber)),
           mapping_engine(std::move(engine)) {}
 };
 
@@ -105,10 +143,10 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
             continue;
         }
         const auto& data = s.data();
-        const int message_id = data.id().role();
+        const int message_id = ResolveRoleFromData(data);
         const float raw_value = static_cast<float>(data.value());
         std::cout << "rx_raw topic=" << handler.name
-                  << " id=" << FormatBusId(data.id())
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
                   << " value=" << raw_value << std::endl;
         if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
             continue;
@@ -118,7 +156,7 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
             return false;
         }
         std::cout << "rx topic=" << handler.name
-                  << " id=" << FormatBusId(data.id())
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
                   << " value=" << raw_value
                   << " -> LT=" << static_cast<int>(state.left_trigger)
                   << " RT=" << static_cast<int>(state.right_trigger)
@@ -140,11 +178,11 @@ bool ProcessStickSamples(StickHandler& handler,
             continue;
         }
         const auto& data = s.data();
-        const int message_id = data.id().role();
+        const int message_id = ResolveRoleFromData(data);
         const float raw_x = static_cast<float>(data.x());
         const float raw_y = static_cast<float>(data.y());
         std::cout << "rx_raw topic=" << handler.name
-                  << " id=" << FormatBusId(data.id())
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
                   << " x=" << raw_x
                   << " y=" << raw_y << std::endl;
         bool updated = handler.mapping_engine.Apply("x", message_id, raw_x, state);
@@ -157,7 +195,7 @@ bool ProcessStickSamples(StickHandler& handler,
             return false;
         }
         std::cout << "rx topic=" << handler.name
-                  << " id=" << FormatBusId(data.id())
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
                   << " x=" << raw_x
                   << " y=" << raw_y
                   << " -> LT=" << static_cast<int>(state.left_trigger)
@@ -179,16 +217,16 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
             continue;
         }
         const auto& data = s.data();
-        const int message_id = data.id().role();
+        const int message_id = ResolveRoleFromData(data);
         const float raw_value = static_cast<float>(data.value());
         std::cout << "rx_raw topic=" << handler.name
-                  << " id=" << FormatBusId(data.id())
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
                   << " value=" << raw_value << std::endl;
         if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
             continue;
         }
         std::cout << "rx topic=" << handler.name
-                  << " id=" << FormatBusId(data.id())
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
                   << " value=" << raw_value
                   << " -> LT=" << static_cast<int>(state.left_trigger)
                   << " RT=" << static_cast<int>(state.right_trigger)
@@ -209,11 +247,11 @@ bool ProcessStickSamples(StickHandler& handler,
             continue;
         }
         const auto& data = s.data();
-        const int message_id = data.id().role();
+        const int message_id = ResolveRoleFromData(data);
         const float raw_x = static_cast<float>(data.x());
         const float raw_y = static_cast<float>(data.y());
         std::cout << "rx_raw topic=" << handler.name
-                  << " id=" << FormatBusId(data.id())
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
                   << " x=" << raw_x
                   << " y=" << raw_y << std::endl;
         bool updated = handler.mapping_engine.Apply("x", message_id, raw_x, state);
@@ -222,7 +260,7 @@ bool ProcessStickSamples(StickHandler& handler,
             continue;
         }
         std::cout << "rx topic=" << handler.name
-                  << " id=" << FormatBusId(data.id())
+                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
                   << " x=" << raw_x
                   << " y=" << raw_y
                   << " -> LT=" << static_cast<int>(state.left_trigger)

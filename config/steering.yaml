@@ -1,14 +1,14 @@
 dds:
-  topic: "vehicle.steering_position"
+  topic: "Stick_TwoAxis"
   type: "Gamepad::Stick_TwoAxis"
   idl_file: "idl/Gamepad.idl"
   domain_id: 0
 
 mapping:
   - name: steering
-    id: 3
+    id: 30
     field: x
-    to: axis:left_x
+    to: axis:right_x
     input_min: -110.0
     input_max: 110.0
     scale: 1.0

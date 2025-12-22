@@ -1,5 +1,5 @@
 dds:
-  topic: "vehicle.analog_controls"
+  topic: "Gamepad_Analog"
   type: "Gamepad::Gamepad_Analog"
   idl_file: "idl/Gamepad.idl"
   domain_id: 0
