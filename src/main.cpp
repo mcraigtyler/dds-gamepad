@@ -1,6 +1,8 @@
 ﻿// main.cpp
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -10,6 +12,7 @@
 
 #ifdef _WIN32
 #include "emulator/VigemClient.h"
+#include "console/RxTable.h"
 #endif
 
 #include "config/ConfigLoader.h"
@@ -81,7 +84,7 @@ const Common::BusIdentifier_t& ResolveBusIdFromData(const T& data) {
 
 void print_usage(const char* exe)
 {
-    std::cerr << "Usage: " << exe << " <config_dir> [domain_id] [--debug]" << std::endl;
+    std::cerr << "Usage: " << exe << " <config_dir> [domain_id] [--debug | --table]" << std::endl;
     std::cerr << "       " << exe << " --help" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Args:" << std::endl;
@@ -90,8 +93,24 @@ void print_usage(const char* exe)
     std::cerr << std::endl;
     std::cerr << "Options:" << std::endl;
     std::cerr << "  --debug            Enable verbose raw input logging (rx_raw...)." << std::endl;
+    std::cerr << "  --table            Live table (one row per topic+id). Displays rx only; no scrolling." << std::endl;
     std::cerr << "  -h, --help         Show this help text." << std::endl;
 }
+
+#ifdef _WIN32
+struct RxOutput
+{
+    bool logRxRaw = false;
+    bool logRx = true;
+    console::RxTable* table = nullptr;
+};
+#else
+struct RxOutput
+{
+    bool logRxRaw = false;
+    bool logRx = true;
+};
+#endif
 
 int ResolveDomainId(const std::vector<config::AppConfig>& configs) {
     int domain_id = 0;
@@ -146,7 +165,7 @@ struct StickHandler {
 bool ProcessAnalogSamples(AnalogHandler& handler,
                           mapper::GamepadState& state,
                           emulator::VigemClient& client,
-                          bool log_rx_raw) {
+                          const RxOutput& output) {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
         if (!s.info().valid()) {
@@ -155,11 +174,20 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
         const auto& data = s.data();
         const int message_id = ResolveRoleFromData(data);
         const float raw_value = static_cast<float>(data.value());
-        if (log_rx_raw) {
-            std::cout << "rx_raw topic=" << handler.name
-                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                      << " value=" << raw_value << std::endl;
+
+        const std::string bus_id = FormatBusId(ResolveBusIdFromData(data));
+        if (output.table != nullptr) {
+            std::ostringstream value;
+            value << std::fixed << std::setprecision(3) << raw_value;
+            output.table->Update(handler.name, bus_id, value.str());
+        } else {
+            if (output.logRxRaw) {
+                std::cout << "rx_raw topic=" << handler.name
+                          << " id=" << bus_id
+                          << " value=" << raw_value << std::endl;
+            }
         }
+
         if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
             continue;
         }
@@ -167,16 +195,18 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
             std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
             return false;
         }
-        std::cout << "rx topic=" << handler.name
-                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                  << " value=" << raw_value
-                  << " -> LT=" << static_cast<int>(state.left_trigger)
-                  << " RT=" << static_cast<int>(state.right_trigger)
-                  << " LX=" << state.left_stick_x
-                  << " LY=" << state.left_stick_y
-                  << " RX=" << state.right_stick_x
-                  << " RY=" << state.right_stick_y
-                  << std::endl;
+        if (output.table == nullptr && output.logRx) {
+            std::cout << "rx topic=" << handler.name
+                      << " id=" << bus_id
+                      << " value=" << raw_value
+                      << " -> LT=" << static_cast<int>(state.left_trigger)
+                      << " RT=" << static_cast<int>(state.right_trigger)
+                      << " LX=" << state.left_stick_x
+                      << " LY=" << state.left_stick_y
+                      << " RX=" << state.right_stick_x
+                      << " RY=" << state.right_stick_y
+                      << std::endl;
+        }
     }
     return true;
 }
@@ -184,7 +214,7 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
 bool ProcessStickSamples(StickHandler& handler,
                          mapper::GamepadState& state,
                          emulator::VigemClient& client,
-                         bool log_rx_raw) {
+                         const RxOutput& output) {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
         if (!s.info().valid()) {
@@ -194,12 +224,22 @@ bool ProcessStickSamples(StickHandler& handler,
         const int message_id = ResolveRoleFromData(data);
         const float raw_x = static_cast<float>(data.x());
         const float raw_y = static_cast<float>(data.y());
-        if (log_rx_raw) {
-            std::cout << "rx_raw topic=" << handler.name
-                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                      << " x=" << raw_x
-                      << " y=" << raw_y << std::endl;
+
+        const std::string bus_id = FormatBusId(ResolveBusIdFromData(data));
+        if (output.table != nullptr) {
+            std::ostringstream value;
+            value << "x=" << std::fixed << std::setprecision(3) << raw_x
+                  << " y=" << std::fixed << std::setprecision(3) << raw_y;
+            output.table->Update(handler.name, bus_id, value.str());
+        } else {
+            if (output.logRxRaw) {
+                std::cout << "rx_raw topic=" << handler.name
+                          << " id=" << bus_id
+                          << " x=" << raw_x
+                          << " y=" << raw_y << std::endl;
+            }
         }
+
         bool updated = handler.mapping_engine.Apply("x", message_id, raw_x, state);
         updated = handler.mapping_engine.Apply("y", message_id, raw_y, state) || updated;
         if (!updated) {
@@ -209,24 +249,27 @@ bool ProcessStickSamples(StickHandler& handler,
             std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
             return false;
         }
-        std::cout << "rx topic=" << handler.name
-                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                  << " x=" << raw_x
-                  << " y=" << raw_y
-                  << " -> LT=" << static_cast<int>(state.left_trigger)
-                  << " RT=" << static_cast<int>(state.right_trigger)
-                  << " LX=" << state.left_stick_x
-                  << " LY=" << state.left_stick_y
-                  << " RX=" << state.right_stick_x
-                  << " RY=" << state.right_stick_y
-                  << std::endl;
+        if (output.table == nullptr && output.logRx) {
+            std::cout << "rx topic=" << handler.name
+                      << " id=" << bus_id
+                      << " x=" << raw_x
+                      << " y=" << raw_y
+                      << " -> LT=" << static_cast<int>(state.left_trigger)
+                      << " RT=" << static_cast<int>(state.right_trigger)
+                      << " LX=" << state.left_stick_x
+                      << " LY=" << state.left_stick_y
+                      << " RX=" << state.right_stick_x
+                      << " RY=" << state.right_stick_y
+                      << std::endl;
+        }
     }
     return true;
 }
 #else
 bool ProcessAnalogSamples(AnalogHandler& handler,
                           mapper::GamepadState& state,
-                          bool log_rx_raw) {
+                          bool log_rx_raw,
+                          bool log_rx) {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
         if (!s.info().valid()) {
@@ -243,23 +286,26 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
         if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
             continue;
         }
-        std::cout << "rx topic=" << handler.name
-                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                  << " value=" << raw_value
-                  << " -> LT=" << static_cast<int>(state.left_trigger)
-                  << " RT=" << static_cast<int>(state.right_trigger)
-                  << " LX=" << state.left_stick_x
-                  << " LY=" << state.left_stick_y
-                  << " RX=" << state.right_stick_x
-                  << " RY=" << state.right_stick_y
-                  << std::endl;
+        if (log_rx) {
+            std::cout << "rx topic=" << handler.name
+                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                      << " value=" << raw_value
+                      << " -> LT=" << static_cast<int>(state.left_trigger)
+                      << " RT=" << static_cast<int>(state.right_trigger)
+                      << " LX=" << state.left_stick_x
+                      << " LY=" << state.left_stick_y
+                      << " RX=" << state.right_stick_x
+                      << " RY=" << state.right_stick_y
+                      << std::endl;
+        }
     }
     return true;
 }
 
 bool ProcessStickSamples(StickHandler& handler,
                          mapper::GamepadState& state,
-                         bool log_rx_raw) {
+                         bool log_rx_raw,
+                         bool log_rx) {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
         if (!s.info().valid()) {
@@ -280,17 +326,19 @@ bool ProcessStickSamples(StickHandler& handler,
         if (!updated) {
             continue;
         }
-        std::cout << "rx topic=" << handler.name
-                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                  << " x=" << raw_x
-                  << " y=" << raw_y
-                  << " -> LT=" << static_cast<int>(state.left_trigger)
-                  << " RT=" << static_cast<int>(state.right_trigger)
-                  << " LX=" << state.left_stick_x
-                  << " LY=" << state.left_stick_y
-                  << " RX=" << state.right_stick_x
-                  << " RY=" << state.right_stick_y
-                  << std::endl;
+        if (log_rx) {
+            std::cout << "rx topic=" << handler.name
+                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                      << " x=" << raw_x
+                      << " y=" << raw_y
+                      << " -> LT=" << static_cast<int>(state.left_trigger)
+                      << " RT=" << static_cast<int>(state.right_trigger)
+                      << " LX=" << state.left_stick_x
+                      << " LY=" << state.left_stick_y
+                      << " RX=" << state.right_stick_x
+                      << " RY=" << state.right_stick_y
+                      << std::endl;
+        }
     }
     return true;
 }
@@ -305,6 +353,7 @@ int main(int argc, char* argv[])
     }
 
     bool log_rx_raw = false;
+    bool table_mode = false;
     std::string config_path;
     std::optional<int> domain_override;
     for (int i = 1; i < argc; ++i) {
@@ -315,6 +364,10 @@ int main(int argc, char* argv[])
         }
         if (arg == "--debug") {
             log_rx_raw = true;
+            continue;
+        }
+        if (arg == "--table") {
+            table_mode = true;
             continue;
         }
         if (!arg.empty() && arg[0] == '-') {
@@ -346,6 +399,19 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    if (table_mode && log_rx_raw) {
+        std::cerr << "Options --debug and --table are mutually exclusive." << std::endl;
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+#ifndef _WIN32
+    if (table_mode) {
+        std::cerr << "--table is only supported on Windows." << std::endl;
+        return EXIT_FAILURE;
+    }
+#endif
+
     std::vector<config::AppConfig> configs;
     try {
         configs = config::ConfigLoader::LoadDirectory(config_path);
@@ -376,7 +442,9 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 #else
-    std::cout << "ViGEm output is only supported on Windows; running in log-only mode." << std::endl;
+    if (!table_mode) {
+        std::cout << "ViGEm output is only supported on Windows; running in log-only mode." << std::endl;
+    }
 #endif
 
     dds::domain::DomainParticipant participant(domain_id);
@@ -386,8 +454,10 @@ int main(int argc, char* argv[])
     std::vector<TopicHandler> handlers;
     handlers.reserve(configs.size());
     for (const auto& config : configs) {
-        std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << domain_id << ")"
-                  << std::endl;
+        if (!table_mode) {
+            std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << domain_id << ")"
+                      << std::endl;
+        }
         switch (ParseTopicType(config.dds.type)) {
             case TopicType::GamepadAnalog:
                 handlers.emplace_back(AnalogHandler(participant,
@@ -406,37 +476,56 @@ int main(int argc, char* argv[])
 
     mapper::GamepadState state;
 
+#ifdef _WIN32
+    console::RxTable table;
+    console::RxTable* table_ptr = nullptr;
+    if (table_mode) {
+        if (!table.Begin()) {
+            std::cerr << "Failed to initialize console table output." << std::endl;
+            return EXIT_FAILURE;
+        }
+        table_ptr = &table;
+    }
+    RxOutput output;
+    output.logRxRaw = log_rx_raw;
+    output.logRx = !table_mode;
+    output.table = table_ptr;
+#else
+    const bool log_rx = true;
+#endif
+
     while (true) {
         for (auto& handler : handlers) {
 #ifdef _WIN32
             struct HandlerVisitor {
                 mapper::GamepadState& state;
                 emulator::VigemClient& client;
-                bool log_rx_raw;
+                const RxOutput& output;
 
                 bool operator()(AnalogHandler& topic_handler) const {
-                    return ProcessAnalogSamples(topic_handler, state, client, log_rx_raw);
+                    return ProcessAnalogSamples(topic_handler, state, client, output);
                 }
 
                 bool operator()(StickHandler& topic_handler) const {
-                    return ProcessStickSamples(topic_handler, state, client, log_rx_raw);
+                    return ProcessStickSamples(topic_handler, state, client, output);
                 }
             };
-            bool ok = std::visit(HandlerVisitor{state, client, log_rx_raw}, handler);
+            bool ok = std::visit(HandlerVisitor{state, client, output}, handler);
 #else
             struct HandlerVisitor {
                 mapper::GamepadState& state;
                 bool log_rx_raw;
+                bool log_rx;
 
                 bool operator()(AnalogHandler& topic_handler) const {
-                    return ProcessAnalogSamples(topic_handler, state, log_rx_raw);
+                    return ProcessAnalogSamples(topic_handler, state, log_rx_raw, log_rx);
                 }
 
                 bool operator()(StickHandler& topic_handler) const {
-                    return ProcessStickSamples(topic_handler, state, log_rx_raw);
+                    return ProcessStickSamples(topic_handler, state, log_rx_raw, log_rx);
                 }
             };
-            bool ok = std::visit(HandlerVisitor{state, log_rx_raw}, handler);
+            bool ok = std::visit(HandlerVisitor{state, log_rx_raw, log_rx}, handler);
 #endif
             if (!ok) {
                 return EXIT_FAILURE;
