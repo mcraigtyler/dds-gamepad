@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef _WIN32
-
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -53,5 +51,3 @@ private:
     std::vector<std::string> _rowOrder;
 };
 } // namespace console
-
-#endif // _WIN32

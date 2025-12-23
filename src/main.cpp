@@ -10,10 +10,8 @@
 #include <variant>
 #include <vector>
 
-#ifdef _WIN32
 #include "emulator/VigemClient.h"
 #include "console/RxTable.h"
-#endif
 
 #include "config/ConfigLoader.h"
 #include "dds_includes.h"
@@ -97,20 +95,12 @@ void print_usage(const char* exe)
     std::cerr << "  -h, --help         Show this help text." << std::endl;
 }
 
-#ifdef _WIN32
 struct RxOutput
 {
     bool logRxRaw = false;
     bool logRx = true;
     console::RxTable* table = nullptr;
 };
-#else
-struct RxOutput
-{
-    bool logRxRaw = false;
-    bool logRx = true;
-};
-#endif
 
 int ResolveDomainId(const std::vector<config::AppConfig>& configs) {
     int domain_id = 0;
@@ -161,7 +151,6 @@ struct StickHandler {
           mapping_engine(std::move(engine)) {}
 };
 
-#ifdef _WIN32
 bool ProcessAnalogSamples(AnalogHandler& handler,
                           mapper::GamepadState& state,
                           emulator::VigemClient& client,
@@ -265,84 +254,6 @@ bool ProcessStickSamples(StickHandler& handler,
     }
     return true;
 }
-#else
-bool ProcessAnalogSamples(AnalogHandler& handler,
-                          mapper::GamepadState& state,
-                          bool log_rx_raw,
-                          bool log_rx) {
-    auto samples = handler.reader.take();
-    for (const auto& s : samples) {
-        if (!s.info().valid()) {
-            continue;
-        }
-        const auto& data = s.data();
-        const int message_id = ResolveRoleFromData(data);
-        const float raw_value = static_cast<float>(data.value());
-        if (log_rx_raw) {
-            std::cout << "rx_raw topic=" << handler.name
-                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                      << " value=" << raw_value << std::endl;
-        }
-        if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
-            continue;
-        }
-        if (log_rx) {
-            std::cout << "rx topic=" << handler.name
-                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                      << " value=" << raw_value
-                      << " -> LT=" << static_cast<int>(state.left_trigger)
-                      << " RT=" << static_cast<int>(state.right_trigger)
-                      << " LX=" << state.left_stick_x
-                      << " LY=" << state.left_stick_y
-                      << " RX=" << state.right_stick_x
-                      << " RY=" << state.right_stick_y
-                      << std::endl;
-        }
-    }
-    return true;
-}
-
-bool ProcessStickSamples(StickHandler& handler,
-                         mapper::GamepadState& state,
-                         bool log_rx_raw,
-                         bool log_rx) {
-    auto samples = handler.reader.take();
-    for (const auto& s : samples) {
-        if (!s.info().valid()) {
-            continue;
-        }
-        const auto& data = s.data();
-        const int message_id = ResolveRoleFromData(data);
-        const float raw_x = static_cast<float>(data.x());
-        const float raw_y = static_cast<float>(data.y());
-        if (log_rx_raw) {
-            std::cout << "rx_raw topic=" << handler.name
-                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                      << " x=" << raw_x
-                      << " y=" << raw_y << std::endl;
-        }
-        bool updated = handler.mapping_engine.Apply("x", message_id, raw_x, state);
-        updated = handler.mapping_engine.Apply("y", message_id, raw_y, state) || updated;
-        if (!updated) {
-            continue;
-        }
-        if (log_rx) {
-            std::cout << "rx topic=" << handler.name
-                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                      << " x=" << raw_x
-                      << " y=" << raw_y
-                      << " -> LT=" << static_cast<int>(state.left_trigger)
-                      << " RT=" << static_cast<int>(state.right_trigger)
-                      << " LX=" << state.left_stick_x
-                      << " LY=" << state.left_stick_y
-                      << " RX=" << state.right_stick_x
-                      << " RY=" << state.right_stick_y
-                      << std::endl;
-        }
-    }
-    return true;
-}
-#endif
 }
 
 int main(int argc, char* argv[])
@@ -405,13 +316,6 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-#ifndef _WIN32
-    if (table_mode) {
-        std::cerr << "--table is only supported on Windows." << std::endl;
-        return EXIT_FAILURE;
-    }
-#endif
-
     std::vector<config::AppConfig> configs;
     try {
         configs = config::ConfigLoader::LoadDirectory(config_path);
@@ -431,7 +335,6 @@ int main(int argc, char* argv[])
         domain_id = *domain_override;
     }
 
-#ifdef _WIN32
     emulator::VigemClient client;
     if (!client.Connect()) {
         std::cerr << "Failed to connect to ViGEm: " << client.LastError() << std::endl;
@@ -441,11 +344,6 @@ int main(int argc, char* argv[])
         std::cerr << "Failed to add Xbox 360 controller: " << client.LastError() << std::endl;
         return EXIT_FAILURE;
     }
-#else
-    if (!table_mode) {
-        std::cout << "ViGEm output is only supported on Windows; running in log-only mode." << std::endl;
-    }
-#endif
 
     dds::domain::DomainParticipant participant(domain_id);
     dds::sub::Subscriber subscriber(participant);
@@ -476,7 +374,6 @@ int main(int argc, char* argv[])
 
     mapper::GamepadState state;
 
-#ifdef _WIN32
     console::RxTable table;
     console::RxTable* table_ptr = nullptr;
     if (table_mode) {
@@ -490,13 +387,9 @@ int main(int argc, char* argv[])
     output.logRxRaw = log_rx_raw;
     output.logRx = !table_mode;
     output.table = table_ptr;
-#else
-    const bool log_rx = true;
-#endif
 
     while (true) {
         for (auto& handler : handlers) {
-#ifdef _WIN32
             struct HandlerVisitor {
                 mapper::GamepadState& state;
                 emulator::VigemClient& client;
@@ -511,22 +404,6 @@ int main(int argc, char* argv[])
                 }
             };
             bool ok = std::visit(HandlerVisitor{state, client, output}, handler);
-#else
-            struct HandlerVisitor {
-                mapper::GamepadState& state;
-                bool log_rx_raw;
-                bool log_rx;
-
-                bool operator()(AnalogHandler& topic_handler) const {
-                    return ProcessAnalogSamples(topic_handler, state, log_rx_raw, log_rx);
-                }
-
-                bool operator()(StickHandler& topic_handler) const {
-                    return ProcessStickSamples(topic_handler, state, log_rx_raw, log_rx);
-                }
-            };
-            bool ok = std::visit(HandlerVisitor{state, log_rx_raw, log_rx}, handler);
-#endif
             if (!ok) {
                 return EXIT_FAILURE;
             }

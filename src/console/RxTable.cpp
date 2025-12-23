@@ -1,5 +1,3 @@
-#ifdef _WIN32
-
 #include "console/RxTable.h"
 
 #include <algorithm>
@@ -223,5 +221,3 @@ void RxTable::RedrawAll() noexcept
     }
 }
 } // namespace console
-
-#endif // _WIN32

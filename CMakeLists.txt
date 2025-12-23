@@ -1,6 +1,10 @@
 ﻿cmake_minimum_required(VERSION 3.31)
 project(dds-gamepad)
 
+if(NOT WIN32)
+    message(FATAL_ERROR "dds-gamepad is a Windows-only application")
+endif()
+
 if(MSVC)
     # MSVC 17.5 has a C++20 parsing issue in CycloneDDS-CXX headers.
     set(CMAKE_CXX_STANDARD 17)
