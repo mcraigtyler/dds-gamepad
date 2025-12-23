@@ -84,12 +84,12 @@ const Common::BusIdentifier_t& ResolveBusIdFromData(const T& data) {
 
 void print_usage(const char* exe)
 {
-    std::cerr << "Usage: " << exe << " <config_dir> [domain_id] [--debug | --table]" << std::endl;
+    std::cerr << "Usage: " << exe << " <config_dir> <domain_id> [--debug | --table]" << std::endl;
     std::cerr << "       " << exe << " --help" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Args:" << std::endl;
     std::cerr << "  <config_dir>      Directory containing one or more YAML config files." << std::endl;
-    std::cerr << "  [domain_id]       Optional DDS domain id override (integer)." << std::endl;
+    std::cerr << "  <domain_id>       DDS domain id (integer)." << std::endl;
     std::cerr << std::endl;
     std::cerr << "Options:" << std::endl;
     std::cerr << "  --debug            Enable verbose raw input logging (rx_raw...)." << std::endl;
@@ -103,23 +103,6 @@ struct RxOutput
     bool logRx = true;
     console::RxTable* table = nullptr;
 };
-
-int ResolveDomainId(const std::vector<config::AppConfig>& configs) {
-    int domain_id = 0;
-    bool has_domain_id = false;
-    for (const auto& config : configs) {
-        if (!config.dds.has_domain_id) {
-            continue;
-        }
-        if (!has_domain_id) {
-            domain_id = config.dds.domain_id;
-            has_domain_id = true;
-        } else if (domain_id != config.dds.domain_id) {
-            throw std::runtime_error("Configs specify multiple domain_id values; supply [domain_id] on the command line.");
-        }
-    }
-    return domain_id;
-}
 
 struct AnalogHandler {
     std::string name;
@@ -297,7 +280,7 @@ int main(int argc, char* argv[])
     bool log_rx_raw = false;
     bool table_mode = false;
     std::string config_path;
-    std::optional<int> domain_override;
+    std::optional<int> domain_id;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
@@ -321,9 +304,9 @@ int main(int argc, char* argv[])
             config_path = arg;
             continue;
         }
-        if (!domain_override.has_value()) {
+        if (!domain_id.has_value()) {
             try {
-                domain_override = std::stoi(arg);
+                domain_id = std::stoi(arg);
             } catch (const std::exception&) {
                 std::cerr << "Invalid domain_id: " << arg << std::endl;
                 return EXIT_FAILURE;
@@ -337,6 +320,12 @@ int main(int argc, char* argv[])
     }
 
     if (config_path.empty()) {
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    if (!domain_id.has_value()) {
+        std::cerr << "Missing required domain_id." << std::endl;
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
@@ -355,17 +344,6 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    int domain_id = 0;
-    try {
-        domain_id = ResolveDomainId(configs);
-    } catch (const std::exception& ex) {
-        std::cerr << "Invalid domain_id: " << ex.what() << std::endl;
-        return EXIT_FAILURE;
-    }
-    if (domain_override.has_value()) {
-        domain_id = *domain_override;
-    }
-
     emulator::VigemClient client;
     if (!client.Connect()) {
         std::cerr << "Failed to connect to ViGEm: " << client.LastError() << std::endl;
@@ -376,7 +354,7 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    dds::domain::DomainParticipant participant(domain_id);
+    dds::domain::DomainParticipant participant(*domain_id);
     dds::sub::Subscriber subscriber(participant);
 
     using TopicHandler = std::variant<AnalogHandler, StickHandler>;
@@ -384,7 +362,7 @@ int main(int argc, char* argv[])
     handlers.reserve(configs.size());
     for (const auto& config : configs) {
         if (!table_mode) {
-            std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << domain_id << ")"
+            std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << *domain_id << ")"
                       << std::endl;
         }
         switch (ParseTopicType(config.dds.type)) {

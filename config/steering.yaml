@@ -2,7 +2,6 @@ dds:
   topic: "Gamepad_Stick_TwoAxis"
   type: "Gamepad::Stick_TwoAxis"
   idl_file: "idl/Gamepad.idl"
-  domain_id: 0
 
 mapping:
   - name: steering

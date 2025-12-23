@@ -35,6 +35,7 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 The main `dds-gamepad` executable reads every YAML file in a config folder. Each config defines one DDS topic and a single mapping rule. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the target control range.
 
 `.\install\boilerplate-dds\bin\dds-gamepad.exe <config_dir> [domain_id]`
+`.\install\boilerplate-dds\bin\dds-gamepad.exe <config_dir> <domain_id>`
 
 ### Example config (one file per topic)
 
@@ -43,7 +44,6 @@ dds:
   topic: "vehicle.throttle"
   type: "Gamepad_Analog"
   idl_file: "idl/Gamepad.idl"
-  domain_id: 0
 
 mapping:
   - name: throttle
@@ -62,7 +62,6 @@ dds:
   topic: "vehicle.steering"
   type: "Stick_TwoAxis"
   idl_file: "idl/Gamepad.idl"
-  domain_id: 0
 
 mapping:
   - name: steering
