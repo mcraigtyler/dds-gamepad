@@ -1,4 +1,5 @@
 ﻿// main.cpp
+#include <chrono>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -7,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -124,6 +126,8 @@ struct AnalogHandler {
     dds::topic::Topic<Gamepad::Gamepad_Analog> topic;
     dds::sub::DataReader<Gamepad::Gamepad_Analog> reader;
     mapper::MappingEngine mapping_engine;
+    uint64_t totalValidSamples = 0;
+    std::unordered_set<std::string> seenIds;
 
     AnalogHandler(dds::domain::DomainParticipant& participant,
                   dds::sub::Subscriber& subscriber,
@@ -140,6 +144,8 @@ struct StickHandler {
     dds::topic::Topic<Gamepad::Stick_TwoAxis> topic;
     dds::sub::DataReader<Gamepad::Stick_TwoAxis> reader;
     mapper::MappingEngine mapping_engine;
+    uint64_t totalValidSamples = 0;
+    std::unordered_set<std::string> seenIds;
 
     StickHandler(dds::domain::DomainParticipant& participant,
                  dds::sub::Subscriber& subscriber,
@@ -160,11 +166,12 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
         if (!s.info().valid()) {
             continue;
         }
+        ++handler.totalValidSamples;
         const auto& data = s.data();
+        const std::string bus_id = FormatBusId(ResolveBusIdFromData(data));
+        handler.seenIds.insert(bus_id);
         const int message_id = ResolveRoleFromData(data);
         const float raw_value = static_cast<float>(data.value());
-
-        const std::string bus_id = FormatBusId(ResolveBusIdFromData(data));
         if (output.table != nullptr) {
             std::ostringstream value;
             value << std::fixed << std::setprecision(3) << raw_value;
@@ -209,12 +216,13 @@ bool ProcessStickSamples(StickHandler& handler,
         if (!s.info().valid()) {
             continue;
         }
+        ++handler.totalValidSamples;
         const auto& data = s.data();
+        const std::string bus_id = FormatBusId(ResolveBusIdFromData(data));
+        handler.seenIds.insert(bus_id);
         const int message_id = ResolveRoleFromData(data);
         const float raw_x = static_cast<float>(data.x());
         const float raw_y = static_cast<float>(data.y());
-
-        const std::string bus_id = FormatBusId(ResolveBusIdFromData(data));
         if (output.table != nullptr) {
             std::ostringstream value;
             value << "x=" << std::fixed << std::setprecision(3) << raw_x
@@ -253,6 +261,29 @@ bool ProcessStickSamples(StickHandler& handler,
         }
     }
     return true;
+}
+
+std::string FormatReaderStatus(dds::sub::AnyDataReader& reader, double rxRatePerSecondPerIdAvg, size_t uniqueIdCount)
+{
+    const auto matched = reader.subscription_matched_status();
+    const auto liveliness = reader.liveliness_changed_status();
+    const auto qos = reader.requested_incompatible_qos_status();
+    const auto deadline = reader.requested_deadline_missed_status();
+    const auto lost = reader.sample_lost_status();
+    const auto rejected = reader.sample_rejected_status();
+
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(1)
+        << "rate=" << rxRatePerSecondPerIdAvg << "/s"
+        << " ids=" << uniqueIdCount
+        << " writers=" << matched.current_count()
+        << " alive=" << liveliness.alive_count()
+        << " notAlive=" << liveliness.not_alive_count()
+        << " qosIncompat=" << qos.total_count()
+        << " deadlineMiss=" << deadline.total_count()
+        << " lost=" << lost.total_count()
+        << " rejected=" << rejected.total_count();
+    return out.str();
 }
 }
 
@@ -377,7 +408,15 @@ int main(int argc, char* argv[])
     console::RxTable table;
     console::RxTable* table_ptr = nullptr;
     if (table_mode) {
-        if (!table.Begin()) {
+        std::vector<std::string> topic_names;
+        topic_names.reserve(handlers.size());
+        for (const auto& handler : handlers) {
+            std::visit([&](const auto& topic_handler) {
+                topic_names.push_back(topic_handler.name);
+            }, handler);
+        }
+
+        if (!table.Begin(topic_names)) {
             std::cerr << "Failed to initialize console table output." << std::endl;
             return EXIT_FAILURE;
         }
@@ -388,7 +427,77 @@ int main(int argc, char* argv[])
     output.logRx = !table_mode;
     output.table = table_ptr;
 
+    struct StatusSource {
+        std::string topic;
+        dds::sub::AnyDataReader reader;
+        uint64_t* totalValidSamples = nullptr;
+        std::unordered_set<std::string>* seenIds = nullptr;
+        uint64_t lastTotalValidSamples = 0;
+        bool hasLastTotal = false;
+
+        StatusSource(std::string topicName,
+                     const dds::sub::AnyDataReader& anyReader,
+                     uint64_t* totalSamples,
+                     std::unordered_set<std::string>* ids)
+            : topic(std::move(topicName)),
+              reader(anyReader),
+              totalValidSamples(totalSamples),
+              seenIds(ids)
+        {
+        }
+    };
+
+    std::vector<StatusSource> status_sources;
+    if (table_mode) {
+        status_sources.reserve(handlers.size());
+        for (auto& handler : handlers) {
+            std::visit([&](auto& topic_handler) {
+                status_sources.emplace_back(topic_handler.name,
+                                           topic_handler.reader,
+                                           &topic_handler.totalValidSamples,
+                                           &topic_handler.seenIds);
+            }, handler);
+        }
+    }
+
+    auto last_status_update = std::chrono::steady_clock::now() - std::chrono::seconds(10);
+
     while (true) {
+        if (table_ptr != nullptr) {
+            const auto now = std::chrono::steady_clock::now();
+            if (now - last_status_update >= std::chrono::milliseconds(500)) {
+                const double dtSeconds = std::chrono::duration<double>(now - last_status_update).count();
+                for (auto& src : status_sources) {
+                    try {
+                        double rateTotal = 0.0;
+                        if (src.totalValidSamples != nullptr && dtSeconds > 0.0) {
+                            const uint64_t total = *src.totalValidSamples;
+                            if (src.hasLastTotal) {
+                                const uint64_t delta = total - src.lastTotalValidSamples;
+                                rateTotal = static_cast<double>(delta) / dtSeconds;
+                            }
+                            src.lastTotalValidSamples = total;
+                            src.hasLastTotal = true;
+                        }
+
+                        size_t uniqueIds = 0;
+                        if (src.seenIds != nullptr) {
+                            uniqueIds = src.seenIds->size();
+                        }
+                        const size_t divisor = (uniqueIds > 0) ? uniqueIds : 1;
+                        const double rateAvgPerId = rateTotal / static_cast<double>(divisor);
+
+                        table_ptr->SetTopicStatus(src.topic, FormatReaderStatus(src.reader, rateAvgPerId, uniqueIds));
+                    } catch (const std::exception& ex) {
+                        table_ptr->SetTopicStatus(src.topic, std::string("status_error=") + ex.what());
+                    } catch (...) {
+                        table_ptr->SetTopicStatus(src.topic, "status_error=unknown");
+                    }
+                }
+                last_status_update = now;
+            }
+        }
+
         for (auto& handler : handlers) {
             struct HandlerVisitor {
                 mapper::GamepadState& state;

@@ -18,9 +18,11 @@ public:
     RxTable& operator=(const RxTable&) = delete;
 
     bool Begin() noexcept;
+    bool Begin(const std::vector<std::string>& topics) noexcept;
     void End() noexcept;
 
     void Update(const std::string& topic, const std::string& id, const std::string& value) noexcept;
+    void SetTopicStatus(const std::string& topic, const std::string& status) noexcept;
 
 private:
     struct RowData
@@ -37,6 +39,8 @@ private:
     void WriteLineAtRow(SHORT row, const std::string& line) noexcept;
     void RedrawAll() noexcept;
 
+    void WriteTopicStatusLine(const std::string& topic) noexcept;
+
 private:
     HANDLE _out;
     bool _active;
@@ -44,8 +48,16 @@ private:
     SHORT _nextRow;
     CONSOLE_CURSOR_INFO _originalCursorInfo;
 
+    SHORT _statusRowCount;
+    SHORT _tableHeaderRow;
+    SHORT _tableUnderlineRow;
+
     size_t _topicWidth;
     size_t _idWidth;
+
+    std::unordered_map<std::string, SHORT> _topicStatusRows;
+    std::unordered_map<std::string, std::string> _topicStatusText;
+    std::vector<std::string> _topicStatusOrder;
 
     std::unordered_map<std::string, RowData> _rowsByKey;
     std::vector<std::string> _rowOrder;

@@ -21,9 +21,12 @@ RxTable::RxTable() noexcept
     : _out(INVALID_HANDLE_VALUE),
       _active(false),
       _width(0),
-      _nextRow(2),
+            _nextRow(2),
       _topicWidth(std::string("topic").size()),
-      _idWidth(std::string("id").size())
+            _idWidth(std::string("id").size()),
+            _statusRowCount(0),
+            _tableHeaderRow(0),
+            _tableUnderlineRow(1)
 {
     _originalCursorInfo.dwSize = 25;
     _originalCursorInfo.bVisible = TRUE;
@@ -35,6 +38,12 @@ RxTable::~RxTable() noexcept
 }
 
 bool RxTable::Begin() noexcept
+{
+    const std::vector<std::string> noTopics;
+    return Begin(noTopics);
+}
+
+bool RxTable::Begin(const std::vector<std::string>& topics) noexcept
 {
     _out = GetStdHandle(STD_OUTPUT_HANDLE);
     if (_out == INVALID_HANDLE_VALUE || _out == nullptr) {
@@ -60,9 +69,30 @@ bool RxTable::Begin() noexcept
 
     _topicWidth = std::string("topic").size();
     _idWidth = std::string("id").size();
+    for (const auto& t : topics) {
+        if (t.size() > _topicWidth) {
+            _topicWidth = t.size();
+        }
+    }
+
+    _topicStatusRows.clear();
+    _topicStatusText.clear();
+    _topicStatusOrder.clear();
+    _topicStatusOrder.reserve(topics.size());
+    _statusRowCount = static_cast<SHORT>(topics.size());
+    _tableHeaderRow = _statusRowCount;
+    _tableUnderlineRow = static_cast<SHORT>(_statusRowCount + 1);
+
+    for (SHORT i = 0; i < _statusRowCount; ++i) {
+        const auto& topic = topics[static_cast<size_t>(i)];
+        _topicStatusRows.emplace(topic, i);
+        _topicStatusText.emplace(topic, std::string());
+        _topicStatusOrder.push_back(topic);
+    }
+
     _rowsByKey.clear();
     _rowOrder.clear();
-    _nextRow = 2;
+    _nextRow = static_cast<SHORT>(_tableUnderlineRow + 1);
 
     RedrawAll();
 
@@ -135,6 +165,33 @@ void RxTable::Update(const std::string& topic, const std::string& id, const std:
     WriteLineAtRow(it->second.row, line);
 }
 
+void RxTable::SetTopicStatus(const std::string& topic, const std::string& status) noexcept
+{
+    if (!_active) {
+        return;
+    }
+
+    auto rowIt = _topicStatusRows.find(topic);
+    if (rowIt == _topicStatusRows.end()) {
+        return;
+    }
+
+    bool widthChanged = false;
+    if (topic.size() > _topicWidth) {
+        _topicWidth = topic.size();
+        widthChanged = true;
+    }
+
+    _topicStatusText[topic] = status;
+
+    if (widthChanged) {
+        RedrawAll();
+        return;
+    }
+
+    WriteTopicStatusLine(topic);
+}
+
 void RxTable::ClearScreen(const CONSOLE_SCREEN_BUFFER_INFO& info) noexcept
 {
     const DWORD cellCount = static_cast<DWORD>(info.dwSize.X) * static_cast<DWORD>(info.dwSize.Y);
@@ -205,8 +262,8 @@ void RxTable::RedrawAll() noexcept
         std::string(_idWidth, '-') + " | " +
         std::string(5, '-');
 
-    WriteLineAtRow(0, header);
-    WriteLineAtRow(1, underline);
+    WriteLineAtRow(_tableHeaderRow, header);
+    WriteLineAtRow(_tableUnderlineRow, underline);
 
     for (const auto& key : _rowOrder) {
         const auto it = _rowsByKey.find(key);
@@ -219,5 +276,19 @@ void RxTable::RedrawAll() noexcept
             it->second.value;
         WriteLineAtRow(it->second.row, line);
     }
+}
+
+void RxTable::WriteTopicStatusLine(const std::string& topic) noexcept
+{
+    const auto rowIt = _topicStatusRows.find(topic);
+    if (rowIt == _topicStatusRows.end()) {
+        return;
+    }
+
+    const auto textIt = _topicStatusText.find(topic);
+    const std::string& status = (textIt != _topicStatusText.end()) ? textIt->second : std::string();
+
+    std::string line = PadRight(topic, _topicWidth) + " | " + status;
+    WriteLineAtRow(rowIt->second, line);
 }
 } // namespace console
