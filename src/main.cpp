@@ -93,7 +93,7 @@ void print_usage(const char* exe)
     std::cerr << std::endl;
     std::cerr << "Options:" << std::endl;
     std::cerr << "  --debug            Enable verbose raw input logging (rx_raw...)." << std::endl;
-    std::cerr << "  --table            Live table (one row per topic+id). Displays rx only; no scrolling." << std::endl;
+    std::cerr << "  --table            Live table + a tx state line (no scrolling)." << std::endl;
     std::cerr << "  -h, --help         Show this help text." << std::endl;
 }
 
@@ -178,12 +178,6 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
             std::cout << "rx topic=" << handler.name
                       << " id=" << bus_id
                       << " value=" << raw_value
-                      << " -> LT=" << static_cast<int>(state.left_trigger)
-                      << " RT=" << static_cast<int>(state.right_trigger)
-                      << " LX=" << state.left_stick_x
-                      << " LY=" << state.left_stick_y
-                      << " RX=" << state.right_stick_x
-                      << " RY=" << state.right_stick_y
                       << std::endl;
         }
     }
@@ -234,12 +228,6 @@ bool ProcessStickSamples(StickHandler& handler,
                       << " id=" << bus_id
                       << " x=" << raw_x
                       << " y=" << raw_y
-                      << " -> LT=" << static_cast<int>(state.left_trigger)
-                      << " RT=" << static_cast<int>(state.right_trigger)
-                      << " LX=" << state.left_stick_x
-                      << " LY=" << state.left_stick_y
-                      << " RX=" << state.right_stick_x
-                      << " RY=" << state.right_stick_y
                       << std::endl;
         }
     }
@@ -354,6 +342,8 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    client.SetLogState(!table_mode);
+
     dds::domain::DomainParticipant participant(*domain_id);
     dds::sub::Subscriber subscriber(participant);
 
@@ -394,7 +384,7 @@ int main(int argc, char* argv[])
             }, handler);
         }
 
-        if (!table.Begin(topic_names)) {
+        if (!table.Begin(topic_names, true)) {
             std::cerr << "Failed to initialize console table output." << std::endl;
             return EXIT_FAILURE;
         }
@@ -404,6 +394,32 @@ int main(int argc, char* argv[])
     output.logRxRaw = log_rx_raw;
     output.logRx = !table_mode;
     output.table = table_ptr;
+
+    class TableTxStateListener final : public emulator::ITxStateListener {
+    public:
+        explicit TableTxStateListener(console::RxTable* tablePtr) : table_(tablePtr) {}
+        void OnTxState(const mapper::GamepadState& txState) override {
+            if (table_ == nullptr) {
+                return;
+            }
+            std::ostringstream out;
+            out << "state"
+                << " LT=" << static_cast<int>(txState.left_trigger)
+                << " RT=" << static_cast<int>(txState.right_trigger)
+                << " LX=" << txState.left_stick_x
+                << " LY=" << txState.left_stick_y
+                << " RX=" << txState.right_stick_x
+                << " RY=" << txState.right_stick_y;
+            table_->SetTxStateLine(out.str());
+        }
+    private:
+        console::RxTable* table_;
+    };
+
+    TableTxStateListener tx_listener(table_ptr);
+    if (table_mode) {
+        client.SetTxStateListener(&tx_listener);
+    }
 
     struct StatusSource {
         std::string topic;

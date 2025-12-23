@@ -25,6 +25,9 @@ RxTable::RxTable() noexcept
       _topicWidth(std::string("topic").size()),
             _idWidth(std::string("id").size()),
             _statusRowCount(0),
+            _hasTxLine(false),
+            _txRow(0),
+            _txText(),
             _tableHeaderRow(0),
             _tableUnderlineRow(1)
 {
@@ -44,6 +47,11 @@ bool RxTable::Begin() noexcept
 }
 
 bool RxTable::Begin(const std::vector<std::string>& topics) noexcept
+{
+    return Begin(topics, false);
+}
+
+bool RxTable::Begin(const std::vector<std::string>& topics, bool includeTxLine) noexcept
 {
     _out = GetStdHandle(STD_OUTPUT_HANDLE);
     if (_out == INVALID_HANDLE_VALUE || _out == nullptr) {
@@ -80,8 +88,17 @@ bool RxTable::Begin(const std::vector<std::string>& topics) noexcept
     _topicStatusOrder.clear();
     _topicStatusOrder.reserve(topics.size());
     _statusRowCount = static_cast<SHORT>(topics.size());
-    _tableHeaderRow = _statusRowCount;
-    _tableUnderlineRow = static_cast<SHORT>(_statusRowCount + 1);
+    _hasTxLine = includeTxLine;
+    _txText.clear();
+    if (_hasTxLine) {
+        _txRow = _statusRowCount;
+        _tableHeaderRow = static_cast<SHORT>(_statusRowCount + 1);
+        _tableUnderlineRow = static_cast<SHORT>(_statusRowCount + 2);
+    } else {
+        _txRow = 0;
+        _tableHeaderRow = _statusRowCount;
+        _tableUnderlineRow = static_cast<SHORT>(_statusRowCount + 1);
+    }
 
     for (SHORT i = 0; i < _statusRowCount; ++i) {
         const auto& topic = topics[static_cast<size_t>(i)];
@@ -192,6 +209,17 @@ void RxTable::SetTopicStatus(const std::string& topic, const std::string& status
     WriteTopicStatusLine(topic);
 }
 
+void RxTable::SetTxStateLine(const std::string& text) noexcept
+{
+    if (!_active || !_hasTxLine) {
+        return;
+    }
+
+    _txText = text;
+    const std::string line = PadRight("tx", _topicWidth) + " | " + _txText;
+    WriteLineAtRow(_txRow, line);
+}
+
 void RxTable::ClearScreen(const CONSOLE_SCREEN_BUFFER_INFO& info) noexcept
 {
     const DWORD cellCount = static_cast<DWORD>(info.dwSize.X) * static_cast<DWORD>(info.dwSize.Y);
@@ -254,6 +282,11 @@ void RxTable::WriteLineAtRow(SHORT row, const std::string& line) noexcept
 
 void RxTable::RedrawAll() noexcept
 {
+    if (_hasTxLine) {
+        const std::string line = PadRight("tx", _topicWidth) + " | " + _txText;
+        WriteLineAtRow(_txRow, line);
+    }
+
     const std::string header =
         PadRight("topic", _topicWidth) + " | " +
         PadRight("id", _idWidth) + " | value";

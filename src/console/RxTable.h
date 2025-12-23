@@ -19,10 +19,12 @@ public:
 
     bool Begin() noexcept;
     bool Begin(const std::vector<std::string>& topics) noexcept;
+    bool Begin(const std::vector<std::string>& topics, bool includeTxLine) noexcept;
     void End() noexcept;
 
     void Update(const std::string& topic, const std::string& id, const std::string& value) noexcept;
     void SetTopicStatus(const std::string& topic, const std::string& status) noexcept;
+    void SetTxStateLine(const std::string& text) noexcept;
 
 private:
     struct RowData
@@ -49,6 +51,9 @@ private:
     CONSOLE_CURSOR_INFO _originalCursorInfo;
 
     SHORT _statusRowCount;
+    bool _hasTxLine;
+    SHORT _txRow;
+    std::string _txText;
     SHORT _tableHeaderRow;
     SHORT _tableUnderlineRow;
 

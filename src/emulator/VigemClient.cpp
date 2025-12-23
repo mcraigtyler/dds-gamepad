@@ -7,6 +7,7 @@
 
 #include <ViGEm/Client.h>
 
+#include <iostream>
 #include <sstream>
 
 namespace emulator {
@@ -57,7 +58,9 @@ VigemClient::VigemClient()
       target_(nullptr),
       last_error_(),
       connected_(false),
-      controller_added_(false) {}
+    controller_added_(false),
+    log_state_(false),
+    tx_state_listener_(nullptr) {}
 
 VigemClient::~VigemClient() {
     Disconnect();
@@ -167,7 +170,28 @@ bool VigemClient::UpdateState(const mapper::GamepadState& state) {
         return false;
     }
 
+    if (tx_state_listener_ != nullptr) {
+        tx_state_listener_->OnTxState(state);
+    } else if (log_state_) {
+        std::cout << "tx state"
+                  << " LT=" << static_cast<int>(state.left_trigger)
+                  << " RT=" << static_cast<int>(state.right_trigger)
+                  << " LX=" << state.left_stick_x
+                  << " LY=" << state.left_stick_y
+                  << " RX=" << state.right_stick_x
+                  << " RY=" << state.right_stick_y
+                  << std::endl;
+    }
+
     return true;
+}
+
+void VigemClient::SetLogState(bool enabled) {
+    log_state_ = enabled;
+}
+
+void VigemClient::SetTxStateListener(ITxStateListener* listener) {
+    tx_state_listener_ = listener;
 }
 
 std::string VigemClient::LastError() const {
