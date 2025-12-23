@@ -1,5 +1,5 @@
 dds:
-  topic: "Stick_TwoAxis"
+  topic: "Gamepad_Stick_TwoAxis"
   type: "Gamepad::Stick_TwoAxis"
   idl_file: "idl/Gamepad.idl"
   domain_id: 0
