@@ -81,7 +81,16 @@ const Common::BusIdentifier_t& ResolveBusIdFromData(const T& data) {
 
 void print_usage(const char* exe)
 {
-    std::cerr << "Usage: " << exe << " <config_dir> [domain_id]" << std::endl;
+    std::cerr << "Usage: " << exe << " <config_dir> [domain_id] [--debug]" << std::endl;
+    std::cerr << "       " << exe << " --help" << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "Args:" << std::endl;
+    std::cerr << "  <config_dir>      Directory containing one or more YAML config files." << std::endl;
+    std::cerr << "  [domain_id]       Optional DDS domain id override (integer)." << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "Options:" << std::endl;
+    std::cerr << "  --debug            Enable verbose raw input logging (rx_raw...)." << std::endl;
+    std::cerr << "  -h, --help         Show this help text." << std::endl;
 }
 
 int ResolveDomainId(const std::vector<config::AppConfig>& configs) {
@@ -136,7 +145,8 @@ struct StickHandler {
 #ifdef _WIN32
 bool ProcessAnalogSamples(AnalogHandler& handler,
                           mapper::GamepadState& state,
-                          emulator::VigemClient& client) {
+                          emulator::VigemClient& client,
+                          bool log_rx_raw) {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
         if (!s.info().valid()) {
@@ -145,9 +155,11 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
         const auto& data = s.data();
         const int message_id = ResolveRoleFromData(data);
         const float raw_value = static_cast<float>(data.value());
-        std::cout << "rx_raw topic=" << handler.name
-                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                  << " value=" << raw_value << std::endl;
+        if (log_rx_raw) {
+            std::cout << "rx_raw topic=" << handler.name
+                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                      << " value=" << raw_value << std::endl;
+        }
         if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
             continue;
         }
@@ -171,7 +183,8 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
 
 bool ProcessStickSamples(StickHandler& handler,
                          mapper::GamepadState& state,
-                         emulator::VigemClient& client) {
+                         emulator::VigemClient& client,
+                         bool log_rx_raw) {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
         if (!s.info().valid()) {
@@ -181,10 +194,12 @@ bool ProcessStickSamples(StickHandler& handler,
         const int message_id = ResolveRoleFromData(data);
         const float raw_x = static_cast<float>(data.x());
         const float raw_y = static_cast<float>(data.y());
-        std::cout << "rx_raw topic=" << handler.name
-                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                  << " x=" << raw_x
-                  << " y=" << raw_y << std::endl;
+        if (log_rx_raw) {
+            std::cout << "rx_raw topic=" << handler.name
+                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                      << " x=" << raw_x
+                      << " y=" << raw_y << std::endl;
+        }
         bool updated = handler.mapping_engine.Apply("x", message_id, raw_x, state);
         updated = handler.mapping_engine.Apply("y", message_id, raw_y, state) || updated;
         if (!updated) {
@@ -210,7 +225,8 @@ bool ProcessStickSamples(StickHandler& handler,
 }
 #else
 bool ProcessAnalogSamples(AnalogHandler& handler,
-                          mapper::GamepadState& state) {
+                          mapper::GamepadState& state,
+                          bool log_rx_raw) {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
         if (!s.info().valid()) {
@@ -219,9 +235,11 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
         const auto& data = s.data();
         const int message_id = ResolveRoleFromData(data);
         const float raw_value = static_cast<float>(data.value());
-        std::cout << "rx_raw topic=" << handler.name
-                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                  << " value=" << raw_value << std::endl;
+        if (log_rx_raw) {
+            std::cout << "rx_raw topic=" << handler.name
+                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                      << " value=" << raw_value << std::endl;
+        }
         if (!handler.mapping_engine.Apply("value", message_id, raw_value, state)) {
             continue;
         }
@@ -240,7 +258,8 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
 }
 
 bool ProcessStickSamples(StickHandler& handler,
-                         mapper::GamepadState& state) {
+                         mapper::GamepadState& state,
+                         bool log_rx_raw) {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
         if (!s.info().valid()) {
@@ -250,10 +269,12 @@ bool ProcessStickSamples(StickHandler& handler,
         const int message_id = ResolveRoleFromData(data);
         const float raw_x = static_cast<float>(data.x());
         const float raw_y = static_cast<float>(data.y());
-        std::cout << "rx_raw topic=" << handler.name
-                  << " id=" << FormatBusId(ResolveBusIdFromData(data))
-                  << " x=" << raw_x
-                  << " y=" << raw_y << std::endl;
+        if (log_rx_raw) {
+            std::cout << "rx_raw topic=" << handler.name
+                      << " id=" << FormatBusId(ResolveBusIdFromData(data))
+                      << " x=" << raw_x
+                      << " y=" << raw_y << std::endl;
+        }
         bool updated = handler.mapping_engine.Apply("x", message_id, raw_x, state);
         updated = handler.mapping_engine.Apply("y", message_id, raw_y, state) || updated;
         if (!updated) {
@@ -283,7 +304,47 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    const std::string config_path = argv[1];
+    bool log_rx_raw = false;
+    std::string config_path;
+    std::optional<int> domain_override;
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help") {
+            print_usage(argv[0]);
+            return EXIT_SUCCESS;
+        }
+        if (arg == "--debug") {
+            log_rx_raw = true;
+            continue;
+        }
+        if (!arg.empty() && arg[0] == '-') {
+            std::cerr << "Unknown option: " << arg << std::endl;
+            print_usage(argv[0]);
+            return EXIT_FAILURE;
+        }
+        if (config_path.empty()) {
+            config_path = arg;
+            continue;
+        }
+        if (!domain_override.has_value()) {
+            try {
+                domain_override = std::stoi(arg);
+            } catch (const std::exception&) {
+                std::cerr << "Invalid domain_id: " << arg << std::endl;
+                return EXIT_FAILURE;
+            }
+            continue;
+        }
+
+        std::cerr << "Unexpected argument: " << arg << std::endl;
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    if (config_path.empty()) {
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
 
     std::vector<config::AppConfig> configs;
     try {
@@ -300,13 +361,8 @@ int main(int argc, char* argv[])
         std::cerr << "Invalid domain_id: " << ex.what() << std::endl;
         return EXIT_FAILURE;
     }
-    if (argc >= 3) {
-        try {
-            domain_id = std::stoi(argv[2]);
-        } catch (const std::exception&) {
-            std::cerr << "Invalid domain_id: " << argv[2] << std::endl;
-            return EXIT_FAILURE;
-        }
+    if (domain_override.has_value()) {
+        domain_id = *domain_override;
     }
 
 #ifdef _WIN32
@@ -356,29 +412,31 @@ int main(int argc, char* argv[])
             struct HandlerVisitor {
                 mapper::GamepadState& state;
                 emulator::VigemClient& client;
+                bool log_rx_raw;
 
                 bool operator()(AnalogHandler& topic_handler) const {
-                    return ProcessAnalogSamples(topic_handler, state, client);
+                    return ProcessAnalogSamples(topic_handler, state, client, log_rx_raw);
                 }
 
                 bool operator()(StickHandler& topic_handler) const {
-                    return ProcessStickSamples(topic_handler, state, client);
+                    return ProcessStickSamples(topic_handler, state, client, log_rx_raw);
                 }
             };
-            bool ok = std::visit(HandlerVisitor{state, client}, handler);
+            bool ok = std::visit(HandlerVisitor{state, client, log_rx_raw}, handler);
 #else
             struct HandlerVisitor {
                 mapper::GamepadState& state;
+                bool log_rx_raw;
 
                 bool operator()(AnalogHandler& topic_handler) const {
-                    return ProcessAnalogSamples(topic_handler, state);
+                    return ProcessAnalogSamples(topic_handler, state, log_rx_raw);
                 }
 
                 bool operator()(StickHandler& topic_handler) const {
-                    return ProcessStickSamples(topic_handler, state);
+                    return ProcessStickSamples(topic_handler, state, log_rx_raw);
                 }
             };
-            bool ok = std::visit(HandlerVisitor{state}, handler);
+            bool ok = std::visit(HandlerVisitor{state, log_rx_raw}, handler);
 #endif
             if (!ok) {
                 return EXIT_FAILURE;
