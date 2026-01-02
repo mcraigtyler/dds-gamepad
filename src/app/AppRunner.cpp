@@ -262,57 +262,66 @@ void SleepWithStop(const StopToken& stopToken, std::chrono::milliseconds duratio
 
 int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
 {
+    _lastError.clear();
+
     if (options.configDir.empty()) {
-        std::cerr << "Missing required configDir." << std::endl;
+        SetLastError("Missing required configDir.");
+        std::cerr << LastError() << std::endl;
         return EXIT_FAILURE;
     }
 
-    std::vector<config::AppConfig> configs;
     try {
-        configs = config::ConfigLoader::LoadDirectory(options.configDir);
-    } catch (const std::exception& ex) {
-        std::cerr << "Failed to load config: " << ex.what() << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    emulator::VigemClient client;
-    if (!client.Connect()) {
-        std::cerr << "Failed to connect to ViGEm: " << client.LastError() << std::endl;
-        return EXIT_FAILURE;
-    }
-    if (!client.AddX360Controller()) {
-        std::cerr << "Failed to add Xbox 360 controller: " << client.LastError() << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    client.SetLogState(!options.tableMode);
-
-    dds::domain::DomainParticipant participant(options.domainId);
-    dds::sub::Subscriber subscriber(participant);
-
-    using TopicHandler = std::variant<AnalogHandler, StickHandler>;
-    std::vector<TopicHandler> handlers;
-    handlers.reserve(configs.size());
-    for (const auto& config : configs) {
-        if (!options.tableMode) {
-            std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << options.domainId << ")"
-                      << std::endl;
+        std::vector<config::AppConfig> configs;
+        try {
+            configs = config::ConfigLoader::LoadDirectory(options.configDir);
+        } catch (const std::exception& ex) {
+            SetLastError(std::string("Failed to load config: ") + ex.what());
+            std::cerr << LastError() << std::endl;
+            return EXIT_FAILURE;
         }
-        switch (ParseTopicType(config.dds.type)) {
-            case TopicType::GamepadAnalog:
-                handlers.emplace_back(AnalogHandler(participant,
-                                                    subscriber,
-                                                    config.dds.topic,
-                                                    mapper::MappingEngine(config.mappings)));
-                break;
-            case TopicType::StickTwoAxis:
-                handlers.emplace_back(StickHandler(participant,
-                                                   subscriber,
-                                                   config.dds.topic,
-                                                   mapper::MappingEngine(config.mappings)));
-                break;
+
+        emulator::VigemClient client;
+        if (!client.Connect()) {
+            SetLastError(std::string("Failed to connect to ViGEm: ") + client.LastError());
+            std::cerr << LastError() << std::endl;
+            return EXIT_FAILURE;
         }
-    }
+        if (!client.AddX360Controller()) {
+            SetLastError(std::string("Failed to add Xbox 360 controller: ") + client.LastError());
+            std::cerr << LastError() << std::endl;
+            return EXIT_FAILURE;
+        }
+
+        // Console mode keeps previous behavior: log tx state unless table mode.
+        // Service mode should set logTxState=false to avoid per-sample output.
+        client.SetLogState(options.logTxState && !options.tableMode);
+
+        dds::domain::DomainParticipant participant(options.domainId);
+        dds::sub::Subscriber subscriber(participant);
+
+        using TopicHandler = std::variant<AnalogHandler, StickHandler>;
+        std::vector<TopicHandler> handlers;
+        handlers.reserve(configs.size());
+        for (const auto& config : configs) {
+            if (options.logStartup && !options.tableMode) {
+                std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << options.domainId << ")"
+                          << std::endl;
+            }
+            switch (ParseTopicType(config.dds.type)) {
+                case TopicType::GamepadAnalog:
+                    handlers.emplace_back(AnalogHandler(participant,
+                                                        subscriber,
+                                                        config.dds.topic,
+                                                        mapper::MappingEngine(config.mappings)));
+                    break;
+                case TopicType::StickTwoAxis:
+                    handlers.emplace_back(StickHandler(participant,
+                                                       subscriber,
+                                                       config.dds.topic,
+                                                       mapper::MappingEngine(config.mappings)));
+                    break;
+            }
+        }
 
     mapper::GamepadState state;
 
@@ -334,10 +343,10 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
         tablePtr = &table;
     }
 
-    RxOutput output;
-    output.logRxRaw = options.logRxRaw;
-    output.logRx = !options.tableMode;
-    output.table = tablePtr;
+        RxOutput output;
+        output.logRxRaw = options.logRxRaw;
+        output.logRx = options.logRx && !options.tableMode;
+        output.table = tablePtr;
 
     class TableTxStateListener final : public emulator::ITxStateListener
     {
@@ -408,7 +417,7 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
 
     auto lastStatusUpdate = std::chrono::steady_clock::now() - std::chrono::seconds(10);
 
-    while (!stopToken.StopRequested()) {
+        while (!stopToken.StopRequested()) {
         if (tablePtr != nullptr) {
             const auto now = std::chrono::steady_clock::now();
             if (now - lastStatusUpdate >= std::chrono::milliseconds(500)) {
@@ -444,7 +453,7 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
             }
         }
 
-        for (auto& handler : handlers) {
+            for (auto& handler : handlers) {
             struct HandlerVisitor {
                 mapper::GamepadState& state;
                 emulator::VigemClient& client;
@@ -461,15 +470,35 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
                 }
             };
 
-            const bool ok = std::visit(HandlerVisitor{state, client, output}, handler);
-            if (!ok) {
-                return EXIT_FAILURE;
+                const bool ok = std::visit(HandlerVisitor{state, client, output}, handler);
+                if (!ok) {
+                    SetLastError(std::string("Runtime error: ") + client.LastError());
+                    return EXIT_FAILURE;
+                }
             }
+
+            SleepWithStop(stopToken, std::chrono::milliseconds(50));
         }
 
-        SleepWithStop(stopToken, std::chrono::milliseconds(50));
+        return EXIT_SUCCESS;
+    } catch (const std::exception& ex) {
+        SetLastError(std::string("Unhandled exception: ") + ex.what());
+        std::cerr << LastError() << std::endl;
+        return EXIT_FAILURE;
+    } catch (...) {
+        SetLastError("Unhandled unknown exception.");
+        std::cerr << LastError() << std::endl;
+        return EXIT_FAILURE;
     }
+}
 
-    return EXIT_SUCCESS;
+const std::string& AppRunner::LastError() const noexcept
+{
+    return _lastError;
+}
+
+void AppRunner::SetLastError(const std::string& error)
+{
+    _lastError = error;
 }
 } // namespace app

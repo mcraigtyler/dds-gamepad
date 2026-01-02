@@ -53,6 +53,7 @@ add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
 
 set(SERVICE_SOURCES
     src/service/ServiceMain.cpp
+    src/service/EventLog.cpp
     src/console/RxTable.cpp
     src/app/AppRunner.cpp
     src/config/ConfigLoader.cpp
@@ -72,7 +73,8 @@ target_link_libraries(${SERVICE_EXE_NAME}
         ${IDL_LIB}
         CycloneDDS::ddsc
         CycloneDDS-CXX::ddscxx
-        yaml-cpp::yaml-cpp)
+        yaml-cpp::yaml-cpp
+        Shell32)
 if(WIN32)
     target_compile_definitions(${EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
     target_compile_definitions(${SERVICE_EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
@@ -184,6 +186,12 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
     install(DIRECTORY idl/
             DESTINATION ${INSTALL_DIR}/idl
             FILES_MATCHING PATTERN "*.idl")
+
+    # Install helper scripts
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/Scripts/install_service.ps1"
+        DESTINATION ${INSTALL_DIR}/scripts
+    )
 
         # Install top-level config files (YAML) used by the application
         install(DIRECTORY config/

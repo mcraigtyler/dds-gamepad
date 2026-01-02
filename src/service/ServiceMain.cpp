@@ -1,14 +1,17 @@
 #include <Windows.h>
+#include <shellapi.h>
 
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
 
 #include "app/AppRunner.h"
+#include "service/EventLog.h"
 
 namespace
 {
@@ -21,6 +24,40 @@ std::thread gWorker;
 std::optional<int> gWorkerExitCode;
 
 app::StopSource gStopSource;
+
+std::unique_ptr<service::EventLog> gEventLog;
+
+std::wstring ToWString(const std::string& value)
+{
+    if (value.empty()) {
+        return std::wstring();
+    }
+    const int required = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, nullptr, 0);
+    if (required <= 0) {
+        return std::wstring();
+    }
+    std::wstring out;
+    out.resize(static_cast<size_t>(required - 1));
+    MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, out.data(), required);
+    return out;
+}
+
+struct WorkerContext
+{
+    app::AppRunner* runner = nullptr;
+    app::AppRunnerOptions options;
+    app::StopToken stopToken;
+};
+
+void WorkerEntry(WorkerContext* ctx)
+{
+    if (ctx == nullptr || ctx->runner == nullptr) {
+        gWorkerExitCode = EXIT_FAILURE;
+        return;
+    }
+
+    gWorkerExitCode = ctx->runner->Run(ctx->options, ctx->stopToken);
+}
 
 void SetServiceState(DWORD currentState,
                      DWORD win32ExitCode = NO_ERROR,
@@ -87,6 +124,19 @@ std::optional<int> ParseDomainIdFromArgs(int argc, wchar_t** argv)
     return std::nullopt;
 }
 
+std::optional<int> ParseDomainIdFromCommandLine()
+{
+    int argc = 0;
+    wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv == nullptr || argc <= 0) {
+        return std::nullopt;
+    }
+
+    const auto domainId = ParseDomainIdFromArgs(argc, argv);
+    LocalFree(argv);
+    return domainId;
+}
+
 std::filesystem::path GetExecutableDirectory()
 {
     wchar_t path[MAX_PATH]{};
@@ -105,6 +155,9 @@ DWORD WINAPI ServiceCtrlHandlerEx(DWORD control, DWORD /*eventType*/, void* /*ev
         case SERVICE_CONTROL_STOP:
         case SERVICE_CONTROL_SHUTDOWN:
             SetServiceState(SERVICE_STOP_PENDING, NO_ERROR, 0, 3000);
+            if (gEventLog) {
+                gEventLog->Info(L"Stop requested.");
+            }
             gStopSource.RequestStop();
             return NO_ERROR;
         default:
@@ -114,8 +167,13 @@ DWORD WINAPI ServiceCtrlHandlerEx(DWORD control, DWORD /*eventType*/, void* /*ev
 
 void WINAPI ServiceMain(DWORD argc, wchar_t** argv)
 {
+    gEventLog = std::make_unique<service::EventLog>(SERVICE_NAME);
+
     gStatusHandle = RegisterServiceCtrlHandlerExW(SERVICE_NAME, ServiceCtrlHandlerEx, nullptr);
     if (gStatusHandle == nullptr) {
+        if (gEventLog) {
+            gEventLog->Error(L"RegisterServiceCtrlHandlerExW failed.");
+        }
         return;
     }
 
@@ -124,8 +182,18 @@ void WINAPI ServiceMain(DWORD argc, wchar_t** argv)
 
     SetServiceState(SERVICE_START_PENDING, NO_ERROR, 0, 3000);
 
-    const auto domainId = ParseDomainIdFromArgs(static_cast<int>(argc), argv);
+    if (gEventLog) {
+        gEventLog->Info(L"Start requested.");
+    }
+
+    (void)argc;
+    (void)argv;
+
+    const auto domainId = ParseDomainIdFromCommandLine();
     if (!domainId.has_value()) {
+        if (gEventLog) {
+            gEventLog->Error(L"Startup failed: missing or invalid --domain-id.");
+        }
         SetServiceState(SERVICE_STOPPED, ERROR_INVALID_PARAMETER, 1);
         return;
     }
@@ -138,30 +206,56 @@ void WINAPI ServiceMain(DWORD argc, wchar_t** argv)
     options.domainId = *domainId;
     options.logRxRaw = false;
     options.tableMode = false;
+    options.logStartup = false;
+    options.logRx = false;
+    options.logTxState = false;
 
     app::AppRunner runner;
 
+    if (gEventLog) {
+        std::wstring msg = L"Starting runner. domainId=" + std::to_wstring(*domainId) +
+                           L" configDir=" + configDir.wstring();
+        gEventLog->Info(msg);
+    }
+
     try {
-        gWorker = std::thread([&]() {
-            gWorkerExitCode = runner.Run(options, gStopSource.Token());
-        });
+        WorkerContext ctx;
+        ctx.runner = &runner;
+        ctx.options = options;
+        ctx.stopToken = gStopSource.Token();
+        gWorker = std::thread(WorkerEntry, &ctx);
+
+        // Transition to RUNNING only after worker thread started successfully.
+        SetServiceState(SERVICE_RUNNING);
+
+        if (gEventLog) {
+            gEventLog->Info(L"Service RUNNING.");
+        }
+
+        if (gWorker.joinable()) {
+            gWorker.join();
+        }
+
+        const int exitCode = gWorkerExitCode.value_or(EXIT_FAILURE);
+        if (exitCode == EXIT_SUCCESS) {
+            if (gEventLog) {
+                gEventLog->Info(L"Service STOPPED.");
+            }
+            SetServiceState(SERVICE_STOPPED, NO_ERROR);
+        } else {
+            if (gEventLog) {
+                std::wstring err = L"Service STOPPED due to error. " + ToWString(runner.LastError());
+                gEventLog->Error(err);
+            }
+            SetServiceState(SERVICE_STOPPED, NO_ERROR, 1);
+        }
+        return;
     } catch (...) {
+        if (gEventLog) {
+            gEventLog->Error(L"Failed to start worker thread.");
+        }
         SetServiceState(SERVICE_STOPPED, ERROR_NOT_ENOUGH_MEMORY, 2);
         return;
-    }
-
-    SetServiceState(SERVICE_RUNNING);
-
-    if (gWorker.joinable()) {
-        gWorker.join();
-    }
-
-    const int exitCode = gWorkerExitCode.value_or(EXIT_FAILURE);
-    if (exitCode == EXIT_SUCCESS) {
-        SetServiceState(SERVICE_STOPPED, NO_ERROR);
-    } else {
-        // Report a service-specific error code (1) so SCM treats it as failure.
-        SetServiceState(SERVICE_STOPPED, NO_ERROR, 1);
     }
 }
 } // namespace

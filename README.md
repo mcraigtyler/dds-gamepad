@@ -128,6 +128,30 @@ cd bin
 .\dds-gamepad.exe ..\config
 ```
 
+## Windows Service
+
+The install tree also includes a Windows Service binary: `bin\dds-gamepad-service.exe`.
+
+Service conventions:
+- Config directory: `bin\config\` (next to the service executable)
+- Domain id: supplied via the service `binPath` argument `--domain-id <n>`
+- Logs: Windows Event Log (Application) under source `dds-gamepad-service`
+
+To install/start/stop the service (run PowerShell as Administrator):
+
+```powershell
+cd C:\dds-gamepad
+.\scripts\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 0 -StartType Automatic
+.\scripts\install_service.ps1 -Action Start
+```
+
+To stop/uninstall:
+
+```powershell
+.\scripts\install_service.ps1 -Action Stop
+.\scripts\install_service.ps1 -Action Uninstall
+```
+
 Notes:
 - If the `installers` folder is missing from the install tree, place the `vc_redist.x64.exe` and ViGEmBus installer in the `installers` folder before running the installers.
 - The app expects Release builds of third-party DLLs (no `*D.dll` debug runtimes) — ship Release artifacts only.
