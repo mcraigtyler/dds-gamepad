@@ -43,6 +43,7 @@ set(EXE_HEADERS
 set(EXE_SOURCES
         src/main.cpp
     src/console/RxTable.cpp
+    src/app/AppRunner.cpp
         src/config/ConfigLoader.cpp
         src/mapper/MappingEngine.cpp
 )

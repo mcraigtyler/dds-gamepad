@@ -173,8 +173,7 @@ The install docs/scripts must call out prerequisites:
 
 ## Tasks
 
-- [ ] 1.0 Define Windows service operational contract
-- [ ] 2.0 Refactor core runtime into a reusable runner (console + service)
-- [ ] 3.0 Implement Windows Service entrypoint and SCM integration
-- [ ] 4.0 Add service-mode configuration + logging strategy
-- [ ] 5.0 Add install/uninstall/start/stop scripts and documentation
+- [x] 1.0 Refactor core runtime into a reusable runner
+- [ ] 2.0 Implement Windows Service entrypoint and SCM integration
+- [ ] 3.0 Add service-mode configuration + logging strategy
+- [ ] 4.0 Add install/uninstall/start/stop scripts and documentation
