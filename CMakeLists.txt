@@ -34,6 +34,7 @@ set(IDL_FILES
 idlcxx_generate(TARGET ${IDL_LIB} FILES ${IDL_FILES} WARNINGS no-implicit-extensibility)
 
 set(EXE_NAME dds-gamepad)
+set(SERVICE_EXE_NAME dds-gamepad-service)
 set(IDL_HEADERS
         ${CMAKE_CURRENT_BINARY_DIR}/Gamepad.hpp
 )
@@ -49,7 +50,24 @@ set(EXE_SOURCES
 )
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
+
+set(SERVICE_SOURCES
+    src/service/ServiceMain.cpp
+    src/console/RxTable.cpp
+    src/app/AppRunner.cpp
+    src/config/ConfigLoader.cpp
+    src/mapper/MappingEngine.cpp
+)
+
+add_executable(${SERVICE_EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${SERVICE_SOURCES})
 target_link_libraries(${EXE_NAME}
+    PRIVATE
+        ${IDL_LIB}
+        CycloneDDS::ddsc
+        CycloneDDS-CXX::ddscxx
+        yaml-cpp::yaml-cpp)
+
+target_link_libraries(${SERVICE_EXE_NAME}
     PRIVATE
         ${IDL_LIB}
         CycloneDDS::ddsc
@@ -57,8 +75,15 @@ target_link_libraries(${EXE_NAME}
         yaml-cpp::yaml-cpp)
 if(WIN32)
     target_compile_definitions(${EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
+    target_compile_definitions(${SERVICE_EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
 endif()
 target_include_directories(${EXE_NAME} PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
+
+target_include_directories(${SERVICE_EXE_NAME} PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
@@ -97,6 +122,7 @@ if(WIN32)
     target_link_libraries(vigem_wrapper PRIVATE Setupapi)
 
     target_link_libraries(${EXE_NAME} PRIVATE vigem_wrapper)
+    target_link_libraries(${SERVICE_EXE_NAME} PRIVATE vigem_wrapper)
 
     add_executable(vigem_sanity src/vigem_sample.cpp)
     target_link_libraries(vigem_sanity PRIVATE vigem_wrapper)
@@ -108,12 +134,17 @@ set_target_properties(${EXE_NAME} PROPERTIES
         BUILD_RPATH "$ORIGIN/../../cyclonedds/lib;$ORIGIN/../../cyclonedds-cxx/lib"
         INSTALL_RPATH "$ORIGIN/../../cyclonedds/lib;$ORIGIN/../../cyclonedds-cxx/lib"
 )
+set_target_properties(${SERVICE_EXE_NAME} PROPERTIES
+    BUILD_RPATH "$ORIGIN/../../cyclonedds/lib;$ORIGIN/../../cyclonedds-cxx/lib"
+    INSTALL_RPATH "$ORIGIN/../../cyclonedds/lib;$ORIGIN/../../cyclonedds-cxx/lib"
+)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 set(INSTALL_DIR "" CACHE PATH "Installation directory")
 
 if(NOT "${INSTALL_DIR}" STREQUAL "")
     install(TARGETS ${EXE_NAME} RUNTIME DESTINATION ${INSTALL_DIR}/bin)
+    install(TARGETS ${SERVICE_EXE_NAME} RUNTIME DESTINATION ${INSTALL_DIR}/bin)
     if(WIN32)
         install(TARGETS vigem_sanity RUNTIME DESTINATION ${INSTALL_DIR}/bin)
     endif()
@@ -157,5 +188,10 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
         # Install top-level config files (YAML) used by the application
         install(DIRECTORY config/
             DESTINATION ${INSTALL_DIR}/config
+            FILES_MATCHING PATTERN "*.yaml")
+
+        # Service convention: config lives next to the service executable.
+        install(DIRECTORY config/
+            DESTINATION ${INSTALL_DIR}/bin/config
             FILES_MATCHING PATTERN "*.yaml")
 endif()
