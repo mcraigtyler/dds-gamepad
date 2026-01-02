@@ -6,6 +6,12 @@
 #include "mapper/GamepadState.h"
 
 namespace emulator {
+class ITxStateListener {
+public:
+    virtual ~ITxStateListener() = default;
+    virtual void OnTxState(const mapper::GamepadState& state) = 0;
+};
+
 class IVigemClient {
 public:
     virtual ~IVigemClient() = default;
@@ -32,6 +38,9 @@ public:
     bool UpdateState(const mapper::GamepadState& state) override;
     std::string LastError() const override;
 
+    void SetLogState(bool enabled);
+    void SetTxStateListener(ITxStateListener* listener);
+
 private:
     void SetError(const std::string& message);
     void ResetError();
@@ -42,5 +51,7 @@ private:
     std::string last_error_;
     bool connected_;
     bool controller_added_;
+    bool log_state_;
+    ITxStateListener* tx_state_listener_;
 };
 }  // namespace emulator

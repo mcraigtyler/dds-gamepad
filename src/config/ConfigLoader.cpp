@@ -131,10 +131,6 @@ AppConfig ConfigLoader::Load(const std::string& path) {
     if (dds_node["idl_file"]) {
         config.dds.idl_file = dds_node["idl_file"].as<std::string>();
     }
-    if (dds_node["domain_id"]) {
-        config.dds.has_domain_id = true;
-        config.dds.domain_id = dds_node["domain_id"].as<int>();
-    }
 
     const YAML::Node mappings_node = root["mapping"];
     if (!mappings_node || !mappings_node.IsSequence()) {

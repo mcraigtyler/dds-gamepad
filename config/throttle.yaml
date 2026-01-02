@@ -2,7 +2,6 @@ dds:
   topic: "Gamepad_Analog"
   type: "Gamepad::Gamepad_Analog"
   idl_file: "idl/Gamepad.idl"
-  domain_id: 0
 
 mapping:
   - name: throttle
