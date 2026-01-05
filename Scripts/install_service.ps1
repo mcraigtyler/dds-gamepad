@@ -3,15 +3,18 @@ Install/uninstall/start/stop helper for the dds-gamepad Windows Service.
 
 Usage examples (run PowerShell as Administrator):
 
-  # Install service pointing at an extracted install tree
-  .\Scripts\install_service.ps1 -Action Install -InstallDir "C:\dds-gamepad" -DomainId 0 -StartType Automatic
+    # From an extracted install tree (script lives in the install root):
+    .\install_service.ps1 -Action Install -InstallDir "C:\dds-gamepad" -DomainId 0 -StartType Automatic
 
   # Start / stop
-  .\Scripts\install_service.ps1 -Action Start
-  .\Scripts\install_service.ps1 -Action Stop
+    .\install_service.ps1 -Action Start
+    .\install_service.ps1 -Action Stop
 
   # Uninstall
-  .\Scripts\install_service.ps1 -Action Uninstall
+    .\install_service.ps1 -Action Uninstall
+
+    # From this repository root (developer workflow):
+    .\Scripts\install_service.ps1 -Action Install -InstallDir ".\install\dds-gamepad" -DomainId 0 -StartType Automatic
 
 Notes:
 - The service binary is expected at: <InstallDir>\bin\dds-gamepad-service.exe

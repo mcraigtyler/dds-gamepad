@@ -141,15 +141,15 @@ To install/start/stop the service (run PowerShell as Administrator):
 
 ```powershell
 cd C:\dds-gamepad
-.\scripts\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 0 -StartType Automatic
-.\scripts\install_service.ps1 -Action Start
+.\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 0 -StartType Automatic
+.\install_service.ps1 -Action Start
 ```
 
 To stop/uninstall:
 
 ```powershell
-.\scripts\install_service.ps1 -Action Stop
-.\scripts\install_service.ps1 -Action Uninstall
+.\install_service.ps1 -Action Stop
+.\install_service.ps1 -Action Uninstall
 ```
 
 Notes:

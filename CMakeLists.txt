@@ -190,7 +190,8 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
     # Install helper scripts
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/Scripts/install_service.ps1"
-        DESTINATION ${INSTALL_DIR}/scripts
+        "${CMAKE_CURRENT_SOURCE_DIR}/Scripts/README.md"
+        DESTINATION ${INSTALL_DIR}
     )
 
         # Install top-level config files (YAML) used by the application
