@@ -167,7 +167,6 @@ RoleConfig ConfigLoader::Load(const std::string& path) {
 
     RoleConfig roleConfig;
     roleConfig.name = RequireString(roleNode, "name");
-    roleConfig.yoke_id = RequireInt(roleNode, "yoke_id");
 
     std::unordered_map<std::string, size_t> topicIndex;
 

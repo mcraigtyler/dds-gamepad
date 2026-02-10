@@ -32,16 +32,16 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 
 ## Run DDS Gamepad
 
-The `dds-gamepad` executable now accepts a **single role config file** and domain id.
+The `dds-gamepad` executable now accepts a **single role config file**, domain id, and yoke id.
 
 ```powershell
-.\install\boilerplate-dds\bin\dds-gamepad.exe <config_file> <domain_id>
+.\install\boilerplate-dds\bin\dds-gamepad.exe <config_file> <domain_id> <yoke_id>
 ```
 
 Example:
 
 ```powershell
-.\install\boilerplate-dds\bin\dds-gamepad.exe .\install\boilerplate-dds\config\driver.yaml 0 --table
+.\install\boilerplate-dds\bin\dds-gamepad.exe .\install\boilerplate-dds\config\driver.yaml 0 1004 --table
 ```
 
 ### Role-based config schema
@@ -51,8 +51,6 @@ Configs are role-based (`config/driver.yaml`, `config/gunner.yaml`) and use this
 ```yaml
 role:
   name: "Driver"
-  yoke_id: 1004
-
 mappings:
   - name: steering
     dds:
@@ -74,6 +72,7 @@ mappings:
 
 - One role config file can contain multiple mappings across topics.
 - `dds.id` matches DDS role id values.
+- `yoke_id` is no longer configured in YAML; pass it on the command line as `<yoke_id>` (or `--yoke-id` for service mode).
 - `dds.field` supports `value`, `x`, and `y` depending on DDS type.
 - `gamepad.to` supports `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`.
 - `scale` is applied before `deadzone` and `invert`.
@@ -121,7 +120,7 @@ Compress-Archive -Path install\dds-gamepad\* -DestinationPath release\dds-gamepa
 
 ```powershell
 cd bin
-.\dds-gamepad.exe ..\config\driver.yaml 0
+.\dds-gamepad.exe ..\config\driver.yaml 0 1004
 ```
 
 ## Windows Service
@@ -131,13 +130,14 @@ The install tree also includes a Windows Service binary: `bin\dds-gamepad-servic
 Service conventions:
 - Config file: defaults to `bin\config\driver.yaml` (next to the service executable)
 - Domain id: supplied via the service `binPath` argument `--domain-id <n>`
+- Yoke id: supplied via the service `binPath` argument `--yoke-id <sub_role>`
 - Logs: Windows Event Log (Application) under source `dds-gamepad-service`
 
 To install/start/stop the service (run PowerShell as Administrator):
 
 ```powershell
 cd C:\dds-gamepad
-.\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 0 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
+.\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 0 -YokeId 1004 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
 .\install_service.ps1 -Action Start
 ```
 

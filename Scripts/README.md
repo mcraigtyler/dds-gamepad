@@ -46,7 +46,7 @@ cd C:\dds-gamepad
 3) Install the service (uses the extracted folder as the install root):
 
 ```powershell
-.\install_service.ps1 -Action Install -InstallDir (Resolve-Path .).Path -DomainId 0 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
+.\install_service.ps1 -Action Install -InstallDir (Resolve-Path .).Path -DomainId 0 -YokeId 1004 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
 ```
 
 4) Start the service:
@@ -97,6 +97,6 @@ Common checks:
 If you want to run interactively (useful for debugging), from the ZIP root:
 
 ```powershell
-.\bin\dds-gamepad.exe .\bin\config\driver.yaml 0 --table
+.\bin\dds-gamepad.exe .\bin\config\driver.yaml 0 1004 --table
 ```
-Where the `0` indicatest the DomainID to register with.
+Where `0` is the DDS domain id and `1004` is the yoke sub_role id to accept.

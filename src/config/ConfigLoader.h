@@ -19,7 +19,6 @@ struct AppConfig {
 
 struct RoleConfig {
     std::string name;
-    int yoke_id = 0;
     std::vector<AppConfig> app_configs;
 };
 
