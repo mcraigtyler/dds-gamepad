@@ -17,9 +17,14 @@ struct AppConfig {
     std::vector<mapper::MappingDefinition> mappings;
 };
 
+struct RoleConfig {
+    std::string name;
+    int yoke_id = 0;
+    std::vector<AppConfig> app_configs;
+};
+
 class ConfigLoader {
 public:
-    static AppConfig Load(const std::string& path);
-    static std::vector<AppConfig> LoadDirectory(const std::string& path);
+    static RoleConfig Load(const std::string& path);
 };
 }  // namespace config

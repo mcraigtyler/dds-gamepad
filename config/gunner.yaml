@@ -1,8 +1,3 @@
-# Proposed Gunner role config (new role-based schema)
-# Notes:
-# - Button mappings require code support for Gamepad::Button + gamepad button targets.
-# - Turret pitch mappings (Gamepad_Analog -> stick axis) require allowing Gamepad_Analog
-#   to target stick axes (today ConfigLoader restricts Gamepad_Analog to triggers).
 
 role:
   name: "Gunner"

@@ -8,7 +8,7 @@ namespace app
 {
 struct AppRunnerOptions
 {
-    std::string configDir;
+    std::string configFile;
     int domainId = 0;
     bool logRxRaw = false;
     bool tableMode = false;
