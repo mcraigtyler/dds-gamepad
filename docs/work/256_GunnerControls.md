@@ -33,7 +33,7 @@ These are the events we care about to indicate we need to change button state fr
 For the Turret DDS messages will come in from 3 different sources to control its movement. The left/right movement will be controlled from the Analog input ID 30 on the x-axis with values ranging from -110 to +110 with negative values turning left and postive values turning right. The Analog input ID 1 will move the turret Down and the Analog input ID 2 will move the turret Up. Both Analog input 1 and 2 have values ranging from 0 to 1.
 
 ### Config File Schema Changes
- Config files will need to be Role based instead of Input Mapping based. This means instead of having a config file per input mapping we would have a config file that has multiple mappings. Each mapping section would contain the topic, type and idl file it uses. The header information of the config file would contain the yoke sub_role id which will be used to filter messages that contain that sub_role id.
+ Config files will need to be Role based instead of Input Mapping based. This means instead of having a config file per input mapping we would have a config file that has multiple mappings. Each mapping section would contain the topic, type and idl file it uses. 
 
  There is no need to be backward compatible with the old config format, just move forward with the new format only.
 
@@ -41,7 +41,6 @@ For the Turret DDS messages will come in from 3 different sources to control its
 ```yaml
 role:
   name: "Driver"
-  yoke_id: 1004
 
 mappings:
   - name: steering
@@ -86,6 +85,9 @@ mappings:
       invert: false
 ```
 
+## YokeID Filtering
+Add a command line parameter which takes in a `yoke_id`. This will contain the yoke `sub_role` id which will be used to filter messages that contain that `sub_role` id. Each message contains the `sub_role` field which identifies the `yoke_id`. When we run an instance of this application we will specify which `yoke_id` we want to recieve and process messages for. Ignore all other messages that do not match this value.
+
 ## Tasks
 - [x] 256.1 Change config files to be by Role instead of by individual input mapping.
 - [x] 256.2 Modify command line to accept a single config file instead of a folder. Log the file being loaded and the mappings being loaded. Update the README's ([Scripts/README](../../Scripts/README.md), [README](../../README.md)).
@@ -93,4 +95,4 @@ mappings:
 - [x] 256.4 Modify code to read new config file format in the new role based configs: [driver.yaml](../../config/driver.yaml) and [gunner.yaml](../../config/gunner.yaml).
 - [x] 256.5 Update the install target to include the new role based configs.
 - [x] 256.6 Read Gamepad Button messages to support [gunner.yaml](../../config/gunner.yaml).
-- [ ] 256.7 Make use of the `yoke_id` to filter out DDS messages so that we only recieve messages where the `yoke_id` from the config matches the `sub_role` of the incoming DDS message.
+- [ ] 256.7 Make use of the `yoke_id` to filter out DDS messages so that we only recieve messages where the `yoke_id` matches the `sub_role` of the incoming DDS message. I removed the `yoke_id` from the config files so remove code that expects the config to have this value. `yoke_id` needs to be sepcified on the command line along with the dds domain id. This also needs to be passed in when installing as a windows service.

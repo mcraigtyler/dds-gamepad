@@ -1,7 +1,6 @@
 
 role:
   name: "Gunner"
-  yoke_id: 1004
 
 mappings:
   # -------- Buttons (Gamepad::Button / Gamepad_Button) --------

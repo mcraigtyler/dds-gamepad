@@ -1,7 +1,6 @@
 
 role:
   name: "Driver"
-  yoke_id: 1004
 
 mappings:
   - name: steering
