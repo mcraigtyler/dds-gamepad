@@ -30,7 +30,9 @@ bool IsStickTarget(mapper::ControlTarget target) {
 
 bool IsButtonTarget(mapper::ControlTarget target) {
     return target == mapper::ControlTarget::ButtonA ||
+           target == mapper::ControlTarget::ButtonB ||
            target == mapper::ControlTarget::ButtonX ||
+           target == mapper::ControlTarget::ButtonY ||
            target == mapper::ControlTarget::DpadUp ||
            target == mapper::ControlTarget::DpadDown ||
            target == mapper::ControlTarget::DpadLeft ||
@@ -59,8 +61,14 @@ mapper::ControlTarget ParseTarget(const std::string& value) {
     if (value == "button:a") {
         return mapper::ControlTarget::ButtonA;
     }
+    if (value == "button:b") {
+        return mapper::ControlTarget::ButtonB;
+    }
     if (value == "button:x") {
         return mapper::ControlTarget::ButtonX;
+    }
+    if (value == "button:y") {
+        return mapper::ControlTarget::ButtonY;
     }
     if (value == "dpad:up") {
         return mapper::ControlTarget::DpadUp;
@@ -76,7 +84,7 @@ mapper::ControlTarget ParseTarget(const std::string& value) {
     }
 
     throw std::runtime_error("Unsupported mapping target '" + value +
-                             "'. Expected axis:left_trigger, axis:right_trigger, axis:left_x, axis:left_y, axis:right_x, axis:right_y, button:a, button:x, dpad:up, dpad:down, dpad:left, dpad:right.");
+                             "'. Expected axis:left_trigger, axis:right_trigger, axis:left_x, axis:left_y, axis:right_x, axis:right_y, button:a, button:b, button:x, button:y, dpad:up, dpad:down, dpad:left, dpad:right.");
 }
 
 std::string RequireString(const YAML::Node& node, const std::string& key) {
@@ -167,7 +175,6 @@ RoleConfig ConfigLoader::Load(const std::string& path) {
 
     RoleConfig roleConfig;
     roleConfig.name = RequireString(roleNode, "name");
-    roleConfig.yoke_id = RequireInt(roleNode, "yoke_id");
 
     std::unordered_map<std::string, size_t> topicIndex;
 

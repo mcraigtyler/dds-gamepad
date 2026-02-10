@@ -10,6 +10,7 @@ struct AppRunnerOptions
 {
     std::string configFile;
     int domainId = 0;
+    int yokeId = 0;
     bool logRxRaw = false;
     bool tableMode = false;
     // Console defaults preserve previous behavior.

@@ -159,6 +159,14 @@ const Common::BusIdentifier_t& ResolveBusIdFromData(const T& data)
     return primary;
 }
 
+
+template <typename T>
+bool MatchesYokeId(const T& data, int yokeId)
+{
+    const auto& busId = ResolveBusIdFromData(data);
+    return busId.sub_role() == yokeId;
+}
+
 struct RxOutput
 {
     bool logRxRaw = false;
@@ -230,7 +238,8 @@ struct ButtonHandler {
 bool ProcessAnalogSamples(AnalogHandler& handler,
                           mapper::GamepadState& state,
                           emulator::VigemClient& client,
-                          const RxOutput& output)
+                          const RxOutput& output,
+                          int yokeId)
 {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
@@ -239,6 +248,9 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
         }
         ++handler.totalValidSamples;
         const auto& data = s.data();
+        if (!MatchesYokeId(data, yokeId)) {
+            continue;
+        }
         const std::string busId = FormatBusId(ResolveBusIdFromData(data));
         handler.seenIds.insert(busId);
         const int messageId = ResolveRoleFromData(data);
@@ -276,7 +288,8 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
 bool ProcessStickSamples(StickHandler& handler,
                          mapper::GamepadState& state,
                          emulator::VigemClient& client,
-                         const RxOutput& output)
+                         const RxOutput& output,
+                         int yokeId)
 {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
@@ -285,6 +298,9 @@ bool ProcessStickSamples(StickHandler& handler,
         }
         ++handler.totalValidSamples;
         const auto& data = s.data();
+        if (!MatchesYokeId(data, yokeId)) {
+            continue;
+        }
         const std::string busId = FormatBusId(ResolveBusIdFromData(data));
         handler.seenIds.insert(busId);
         const int messageId = ResolveRoleFromData(data);
@@ -329,7 +345,8 @@ bool ProcessStickSamples(StickHandler& handler,
 bool ProcessButtonSamples(ButtonHandler& handler,
                           mapper::GamepadState& state,
                           emulator::VigemClient& client,
-                          const RxOutput& output)
+                          const RxOutput& output,
+                          int yokeId)
 {
     auto samples = handler.reader.take();
     for (const auto& s : samples) {
@@ -339,6 +356,9 @@ bool ProcessButtonSamples(ButtonHandler& handler,
 
         ++handler.totalValidSamples;
         const auto& data = s.data();
+        if (!MatchesYokeId(data, yokeId)) {
+            continue;
+        }
         const std::string busId = FormatBusId(ResolveBusIdFromData(data));
         handler.seenIds.insert(busId);
 
@@ -471,14 +491,14 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
         for (const auto& config : roleConfig.app_configs) {
             if (options.logStartup && !options.tableMode) {
                 std::cout << "Loaded config file: " << options.configFile << std::endl;
-                std::cout << "Role: " << roleConfig.name << " (yoke_id=" << roleConfig.yoke_id << ")" << std::endl;
+                std::cout << "Role: " << roleConfig.name << " (yoke_id=" << options.yokeId << ")" << std::endl;
                 break;
             }
         }
 
         for (const auto& config : roleConfig.app_configs) {
             if (options.logStartup && !options.tableMode) {
-                std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << options.domainId << ")"
+                std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << options.domainId << ", yoke_id " << options.yokeId << ")"
                           << std::endl;
                 for (const auto& mapping : config.mappings) {
                     std::cout << "  mapping name=" << mapping.name
@@ -645,24 +665,25 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
                 mapper::GamepadState& state;
                 emulator::VigemClient& client;
                 const RxOutput& output;
+                int yokeId;
 
                 bool operator()(AnalogHandler& topicHandler) const
                 {
-                    return ProcessAnalogSamples(topicHandler, state, client, output);
+                    return ProcessAnalogSamples(topicHandler, state, client, output, yokeId);
                 }
 
                 bool operator()(StickHandler& topicHandler) const
                 {
-                    return ProcessStickSamples(topicHandler, state, client, output);
+                    return ProcessStickSamples(topicHandler, state, client, output, yokeId);
                 }
 
                 bool operator()(ButtonHandler& topicHandler) const
                 {
-                    return ProcessButtonSamples(topicHandler, state, client, output);
+                    return ProcessButtonSamples(topicHandler, state, client, output, yokeId);
                 }
             };
 
-                const bool ok = std::visit(HandlerVisitor{state, client, output}, handler);
+                const bool ok = std::visit(HandlerVisitor{state, client, output, options.yokeId}, handler);
                 if (!ok) {
                     SetLastError(std::string("Runtime error: ") + client.LastError());
                     return EXIT_FAILURE;
