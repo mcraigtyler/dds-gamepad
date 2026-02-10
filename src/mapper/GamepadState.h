@@ -10,5 +10,6 @@ struct GamepadState {
     int16_t right_stick_y = 0;
     uint8_t left_trigger = 0;
     uint8_t right_trigger = 0;
+    uint16_t buttons = 0;
 };
 }  // namespace mapper

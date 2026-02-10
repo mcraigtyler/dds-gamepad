@@ -9,7 +9,9 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <unordered_set>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -27,7 +29,8 @@ namespace
 {
 enum class TopicType {
     GamepadAnalog,
-    StickTwoAxis
+    StickTwoAxis,
+    GamepadButton
 };
 
 TopicType ParseTopicType(const std::string& type)
@@ -38,9 +41,82 @@ TopicType ParseTopicType(const std::string& type)
     if (type == "Gamepad::Stick_TwoAxis" || type == "Stick_TwoAxis") {
         return TopicType::StickTwoAxis;
     }
+    if (type == "Gamepad::Button" || type == "Button") {
+        return TopicType::GamepadButton;
+    }
 
     throw std::runtime_error("Unsupported DDS type '" + type +
-                             "'. Expected Gamepad::Gamepad_Analog or Gamepad::Stick_TwoAxis.");
+                             "'. Expected Gamepad::Gamepad_Analog, Gamepad::Stick_TwoAxis, or Gamepad::Button.");
+}
+
+
+template <typename T, typename = void>
+struct HasHasValue : std::false_type {};
+
+template <typename T>
+struct HasHasValue<T, std::void_t<decltype(std::declval<const T&>().has_value())>> : std::true_type {};
+
+template <typename T, typename = void>
+struct HasValueMethod : std::false_type {};
+
+template <typename T>
+struct HasValueMethod<T, std::void_t<decltype(std::declval<const T&>().value())>> : std::true_type {};
+
+template <typename T, typename = void>
+struct HasDereference : std::false_type {};
+
+template <typename T>
+struct HasDereference<T, std::void_t<decltype(*std::declval<const T&>())>> : std::true_type {};
+
+template <typename T>
+bool TryReadBool(const T& source, bool& out)
+{
+    using Decayed = std::decay_t<T>;
+    if constexpr (std::is_same_v<Decayed, bool>) {
+        out = source;
+        return true;
+    } else if constexpr (std::is_integral_v<Decayed>) {
+        out = source != 0;
+        return true;
+    } else if constexpr (HasHasValue<Decayed>::value && HasValueMethod<Decayed>::value) {
+        if (!source.has_value()) {
+            return false;
+        }
+        out = static_cast<bool>(source.value());
+        return true;
+    } else if constexpr (HasDereference<Decayed>::value && std::is_convertible_v<Decayed, bool>) {
+        if (!static_cast<bool>(source)) {
+            return false;
+        }
+        out = static_cast<bool>(*source);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+template <typename T>
+bool TryReadButtonState(const T& source, Common::ButtonState_t& out)
+{
+    using Decayed = std::decay_t<T>;
+    if constexpr (std::is_same_v<Decayed, Common::ButtonState_t>) {
+        out = source;
+        return true;
+    } else if constexpr (HasHasValue<Decayed>::value && HasValueMethod<Decayed>::value) {
+        if (!source.has_value()) {
+            return false;
+        }
+        out = source.value();
+        return true;
+    } else if constexpr (HasDereference<Decayed>::value && std::is_convertible_v<Decayed, bool>) {
+        if (!static_cast<bool>(source)) {
+            return false;
+        }
+        out = *source;
+        return true;
+    } else {
+        return false;
+    }
 }
 
 dds::sub::qos::DataReaderQos MakeReaderQos(const dds::sub::Subscriber& subscriber)
@@ -122,6 +198,27 @@ struct StickHandler {
                  dds::sub::Subscriber& subscriber,
                  std::string topicName,
                  mapper::MappingEngine engine)
+        : name(std::move(topicName)),
+          topic(participant, name),
+          reader(subscriber, topic, MakeReaderQos(subscriber)),
+          mappingEngine(std::move(engine))
+    {
+    }
+};
+
+
+struct ButtonHandler {
+    std::string name;
+    dds::topic::Topic<Gamepad::Button> topic;
+    dds::sub::DataReader<Gamepad::Button> reader;
+    mapper::MappingEngine mappingEngine;
+    uint64_t totalValidSamples = 0;
+    std::unordered_set<std::string> seenIds;
+
+    ButtonHandler(dds::domain::DomainParticipant& participant,
+                  dds::sub::Subscriber& subscriber,
+                  std::string topicName,
+                  mapper::MappingEngine engine)
         : name(std::move(topicName)),
           topic(participant, name),
           reader(subscriber, topic, MakeReaderQos(subscriber)),
@@ -228,6 +325,75 @@ bool ProcessStickSamples(StickHandler& handler,
     return true;
 }
 
+
+bool ProcessButtonSamples(ButtonHandler& handler,
+                          mapper::GamepadState& state,
+                          emulator::VigemClient& client,
+                          const RxOutput& output)
+{
+    auto samples = handler.reader.take();
+    for (const auto& s : samples) {
+        if (!s.info().valid()) {
+            continue;
+        }
+
+        ++handler.totalValidSamples;
+        const auto& data = s.data();
+        const std::string busId = FormatBusId(ResolveBusIdFromData(data));
+        handler.seenIds.insert(busId);
+
+        bool btnChanging = false;
+        if (!TryReadBool(data.btnChanging(), btnChanging) || !btnChanging) {
+            continue;
+        }
+
+        Common::ButtonState_t btnState = Common::ButtonState_t::Invalid;
+        if (!TryReadButtonState(data.btnState(), btnState)) {
+            continue;
+        }
+
+        float mappedValue = 0.0f;
+        if (btnState == Common::ButtonState_t::Down) {
+            mappedValue = 1.0f;
+        } else if (btnState == Common::ButtonState_t::Up) {
+            mappedValue = 0.0f;
+        } else {
+            continue;
+        }
+
+        const int messageId = ResolveRoleFromData(data);
+
+        if (output.table != nullptr) {
+            output.table->Update(handler.name,
+                                 busId,
+                                 btnState == Common::ButtonState_t::Down ? "down" : "up");
+        } else if (output.logRxRaw) {
+            std::cout << "rx_raw topic=" << handler.name
+                      << " id=" << busId
+                      << " state=" << (btnState == Common::ButtonState_t::Down ? "down" : "up")
+                      << " changing=true" << std::endl;
+        }
+
+        if (!handler.mappingEngine.Apply("btnState", messageId, mappedValue, state)) {
+            continue;
+        }
+
+        if (!client.UpdateState(state)) {
+            std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
+            return false;
+        }
+
+        if (output.table == nullptr && output.logRx) {
+            std::cout << "rx topic=" << handler.name
+                      << " id=" << busId
+                      << " state=" << (btnState == Common::ButtonState_t::Down ? "down" : "up")
+                      << std::endl;
+        }
+    }
+
+    return true;
+}
+
 std::string FormatReaderStatus(dds::sub::AnyDataReader& reader, double rxRatePerSecondPerIdAvg, size_t uniqueIdCount)
 {
     const auto matched = reader.subscription_matched_status();
@@ -299,7 +465,7 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
         dds::domain::DomainParticipant participant(options.domainId);
         dds::sub::Subscriber subscriber(participant);
 
-        using TopicHandler = std::variant<AnalogHandler, StickHandler>;
+        using TopicHandler = std::variant<AnalogHandler, StickHandler, ButtonHandler>;
         std::vector<TopicHandler> handlers;
         handlers.reserve(roleConfig.app_configs.size());
         for (const auto& config : roleConfig.app_configs) {
@@ -333,6 +499,12 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
                                                        subscriber,
                                                        config.dds.topic,
                                                        mapper::MappingEngine(config.mappings)));
+                    break;
+                case TopicType::GamepadButton:
+                    handlers.emplace_back(ButtonHandler(participant,
+                                                        subscriber,
+                                                        config.dds.topic,
+                                                        mapper::MappingEngine(config.mappings)));
                     break;
             }
         }
@@ -383,7 +555,8 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
                 << " LX=" << txState.left_stick_x
                 << " LY=" << txState.left_stick_y
                 << " RX=" << txState.right_stick_x
-                << " RY=" << txState.right_stick_y;
+                << " RY=" << txState.right_stick_y
+                << " Btn=0x" << std::hex << txState.buttons << std::dec;
             _table->SetTxStateLine(out.str());
         }
 
@@ -481,6 +654,11 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
                 bool operator()(StickHandler& topicHandler) const
                 {
                     return ProcessStickSamples(topicHandler, state, client, output);
+                }
+
+                bool operator()(ButtonHandler& topicHandler) const
+                {
+                    return ProcessButtonSamples(topicHandler, state, client, output);
                 }
             };
 

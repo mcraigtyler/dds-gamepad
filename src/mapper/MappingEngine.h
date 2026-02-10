@@ -13,7 +13,13 @@ enum class ControlTarget {
     LeftStickX,
     LeftStickY,
     RightStickX,
-    RightStickY
+    RightStickY,
+    ButtonA,
+    ButtonX,
+    DpadUp,
+    DpadDown,
+    DpadLeft,
+    DpadRight
 };
 
 struct MappingDefinition {

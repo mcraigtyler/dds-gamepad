@@ -28,6 +28,15 @@ bool IsStickTarget(mapper::ControlTarget target) {
            target == mapper::ControlTarget::RightStickY;
 }
 
+bool IsButtonTarget(mapper::ControlTarget target) {
+    return target == mapper::ControlTarget::ButtonA ||
+           target == mapper::ControlTarget::ButtonX ||
+           target == mapper::ControlTarget::DpadUp ||
+           target == mapper::ControlTarget::DpadDown ||
+           target == mapper::ControlTarget::DpadLeft ||
+           target == mapper::ControlTarget::DpadRight;
+}
+
 mapper::ControlTarget ParseTarget(const std::string& value) {
     if (value == "axis:left_trigger") {
         return mapper::ControlTarget::LeftTrigger;
@@ -47,9 +56,27 @@ mapper::ControlTarget ParseTarget(const std::string& value) {
     if (value == "axis:right_y") {
         return mapper::ControlTarget::RightStickY;
     }
+    if (value == "button:a") {
+        return mapper::ControlTarget::ButtonA;
+    }
+    if (value == "button:x") {
+        return mapper::ControlTarget::ButtonX;
+    }
+    if (value == "dpad:up") {
+        return mapper::ControlTarget::DpadUp;
+    }
+    if (value == "dpad:down") {
+        return mapper::ControlTarget::DpadDown;
+    }
+    if (value == "dpad:left") {
+        return mapper::ControlTarget::DpadLeft;
+    }
+    if (value == "dpad:right") {
+        return mapper::ControlTarget::DpadRight;
+    }
 
     throw std::runtime_error("Unsupported mapping target '" + value +
-                             "'. Expected axis:left_trigger, axis:right_trigger, axis:left_x, axis:left_y, axis:right_x, axis:right_y.");
+                             "'. Expected axis:left_trigger, axis:right_trigger, axis:left_x, axis:left_y, axis:right_x, axis:right_y, button:a, button:x, dpad:up, dpad:down, dpad:left, dpad:right.");
 }
 
 std::string RequireString(const YAML::Node& node, const std::string& key) {
@@ -104,7 +131,17 @@ void ValidateMappingType(const std::string& ddsType,
         return;
     }
 
-    throw std::runtime_error("Unsupported DDS type '" + ddsType + "'. Expected Gamepad::Gamepad_Analog or Gamepad::Stick_TwoAxis.");
+    if (ddsType == "Gamepad::Button" || ddsType == "Button") {
+        if (mapping.field != "btnState") {
+            throw std::runtime_error("Unsupported field '" + rawField + "' for Button mapping '" + mapping.name + "'. Expected field: btnState.");
+        }
+        if (!IsButtonTarget(mapping.target)) {
+            throw std::runtime_error("Unsupported target for Button mapping '" + mapping.name + "'. Expected a button or dpad target.");
+        }
+        return;
+    }
+
+    throw std::runtime_error("Unsupported DDS type '" + ddsType + "'. Expected Gamepad::Gamepad_Analog, Gamepad::Stick_TwoAxis, or Gamepad::Button.");
 }
 
 std::string BuildTopicKey(const DdsConfig& dds) {

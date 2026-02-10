@@ -161,6 +161,7 @@ bool VigemClient::UpdateState(const mapper::GamepadState& state) {
     report.sThumbRY = state.right_stick_y;
     report.bLeftTrigger = state.left_trigger;
     report.bRightTrigger = state.right_trigger;
+    report.wButtons = state.buttons;
 
     const auto status = vigem_target_x360_update(static_cast<PVIGEM_CLIENT>(client_),
                                                  static_cast<PVIGEM_TARGET>(target_),
@@ -180,6 +181,7 @@ bool VigemClient::UpdateState(const mapper::GamepadState& state) {
                   << " LY=" << state.left_stick_y
                   << " RX=" << state.right_stick_x
                   << " RY=" << state.right_stick_y
+                  << " Btn=0x" << std::hex << state.buttons << std::dec
                   << std::endl;
     }
 
