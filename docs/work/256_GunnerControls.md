@@ -91,6 +91,6 @@ mappings:
 - [ ] 256.2 Modify command line to accept a single config file instead of a folder. Log the file being loaded and the mappings being loaded. Update the README's ([Scripts/README](../../Scripts/README.md), [README](../../README.md)).
 - [ ] 256.3 Modify Windows Service to accept a ConfigFilePath at Install time. This will serve the same purpose as the command line config path in 256.2 and should call the same undlerying methods to make use of the specified config file.
 - [ ] 256.4 Modify code to read new config file format in the new role based configs: [driver.yaml](../../config/driver.yaml) and [gunner.yaml](../../config/gunner.yaml).
-- [ ] 256.7 Update the install target to include the new role based configs.
-- [ ] 256.5 Read Gamepad Button messages to support [gunner.yaml](../../config/gunner.yaml).
-- [ ] 256.6 Make use of the `yoke_id` to filter out DDS messages so that we only recieve messages where the `yoke_id` from the config matches the `sub_role` of the incoming DDS message.
+- [ ] 256.5 Update the install target to include the new role based configs.
+- [ ] 256.6 Read Gamepad Button messages to support [gunner.yaml](../../config/gunner.yaml).
+- [ ] 256.7 Make use of the `yoke_id` to filter out DDS messages so that we only recieve messages where the `yoke_id` from the config matches the `sub_role` of the incoming DDS message.
