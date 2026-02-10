@@ -4,7 +4,7 @@ Install/uninstall/start/stop helper for the dds-gamepad Windows Service.
 Usage examples (run PowerShell as Administrator):
 
     # From an extracted install tree (script lives in the install root):
-    .\install_service.ps1 -Action Install -InstallDir "C:\dds-gamepad" -DomainId 0 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
+    .\install_service.ps1 -Action Install -InstallDir "C:\dds-gamepad" -DomainId 0 -YokeId 1004 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
 
   # Start / stop
     .\install_service.ps1 -Action Start
@@ -14,7 +14,7 @@ Usage examples (run PowerShell as Administrator):
     .\install_service.ps1 -Action Uninstall
 
     # From this repository root (developer workflow):
-    .\Scripts\install_service.ps1 -Action Install -InstallDir ".\install\dds-gamepad" -DomainId 0 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
+    .\Scripts\install_service.ps1 -Action Install -InstallDir ".\install\dds-gamepad" -DomainId 0 -YokeId 1004 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
 
 Notes:
 - The service binary is expected at: <InstallDir>\bin\dds-gamepad-service.exe
@@ -32,6 +32,8 @@ param(
     [string]$InstallDir = (Get-Location).ProviderPath,
 
     [int]$DomainId = 0,
+
+    [int]$YokeId = 1004,
 
     # Role config file path used by the service. Relative paths are resolved against InstallDir.
     [string]$ConfigFilePath = 'bin\config\driver.yaml',
@@ -70,7 +72,7 @@ function Get-BinPath {
     # sc.exe wants the full binPath string including args.
     $quotedExe = '"' + $exePath + '"'
     $quotedConfig = '"' + $resolvedConfigFilePath + '"'
-    return "$quotedExe --domain-id $DomainId --config-file $quotedConfig"
+    return "$quotedExe --domain-id $DomainId --yoke-id $YokeId --config-file $quotedConfig"
 }
 
 function New-EventLogSourceIfMissing {

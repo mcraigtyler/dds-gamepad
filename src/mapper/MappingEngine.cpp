@@ -12,7 +12,9 @@ constexpr uint16_t kDpadDownMask = 0x0002;
 constexpr uint16_t kDpadLeftMask = 0x0004;
 constexpr uint16_t kDpadRightMask = 0x0008;
 constexpr uint16_t kButtonAMask = 0x1000;
+constexpr uint16_t kButtonBMask = 0x2000;
 constexpr uint16_t kButtonXMask = 0x4000;
+constexpr uint16_t kButtonYMask = 0x8000;
 
 float ApplyDeadzone(float value, float deadzone) {
     if (deadzone <= 0.0f) {
@@ -95,7 +97,9 @@ bool MappingEngine::Apply(const std::string& field, int message_id, float value,
                 mapped_value = std::clamp(mapped_value, -1.0f, 1.0f);
                 break;
             case ControlTarget::ButtonA:
+            case ControlTarget::ButtonB:
             case ControlTarget::ButtonX:
+            case ControlTarget::ButtonY:
             case ControlTarget::DpadUp:
             case ControlTarget::DpadDown:
             case ControlTarget::DpadLeft:
@@ -130,11 +134,25 @@ bool MappingEngine::Apply(const std::string& field, int message_id, float value,
                     state.buttons &= static_cast<uint16_t>(~kButtonAMask);
                 }
                 break;
+            case ControlTarget::ButtonB:
+                if (mapped_value > 0.5f) {
+                    state.buttons |= kButtonBMask;
+                } else {
+                    state.buttons &= static_cast<uint16_t>(~kButtonBMask);
+                }
+                break;
             case ControlTarget::ButtonX:
                 if (mapped_value > 0.5f) {
                     state.buttons |= kButtonXMask;
                 } else {
                     state.buttons &= static_cast<uint16_t>(~kButtonXMask);
+                }
+                break;
+            case ControlTarget::ButtonY:
+                if (mapped_value > 0.5f) {
+                    state.buttons |= kButtonYMask;
+                } else {
+                    state.buttons &= static_cast<uint16_t>(~kButtonYMask);
                 }
                 break;
             case ControlTarget::DpadUp:
