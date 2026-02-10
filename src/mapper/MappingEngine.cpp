@@ -4,8 +4,16 @@
 #include <cmath>
 #include <limits>
 
+
 namespace mapper {
 namespace {
+constexpr uint16_t kDpadUpMask = 0x0001;
+constexpr uint16_t kDpadDownMask = 0x0002;
+constexpr uint16_t kDpadLeftMask = 0x0004;
+constexpr uint16_t kDpadRightMask = 0x0008;
+constexpr uint16_t kButtonAMask = 0x1000;
+constexpr uint16_t kButtonXMask = 0x4000;
+
 float ApplyDeadzone(float value, float deadzone) {
     if (deadzone <= 0.0f) {
         return value;
@@ -86,6 +94,14 @@ bool MappingEngine::Apply(const std::string& field, int message_id, float value,
                 mapped_value = ApplyDeadzone(mapped_value, mapping.deadzone);
                 mapped_value = std::clamp(mapped_value, -1.0f, 1.0f);
                 break;
+            case ControlTarget::ButtonA:
+            case ControlTarget::ButtonX:
+            case ControlTarget::DpadUp:
+            case ControlTarget::DpadDown:
+            case ControlTarget::DpadLeft:
+            case ControlTarget::DpadRight:
+                mapped_value = (mapped_value > 0.5f) ? 1.0f : 0.0f;
+                break;
         }
 
         switch (mapping.target) {
@@ -106,6 +122,48 @@ bool MappingEngine::Apply(const std::string& field, int message_id, float value,
                 break;
             case ControlTarget::RightStickY:
                 state.right_stick_y = AxisFromNormalized(mapped_value);
+                break;
+            case ControlTarget::ButtonA:
+                if (mapped_value > 0.5f) {
+                    state.buttons |= kButtonAMask;
+                } else {
+                    state.buttons &= static_cast<uint16_t>(~kButtonAMask);
+                }
+                break;
+            case ControlTarget::ButtonX:
+                if (mapped_value > 0.5f) {
+                    state.buttons |= kButtonXMask;
+                } else {
+                    state.buttons &= static_cast<uint16_t>(~kButtonXMask);
+                }
+                break;
+            case ControlTarget::DpadUp:
+                if (mapped_value > 0.5f) {
+                    state.buttons |= kDpadUpMask;
+                } else {
+                    state.buttons &= static_cast<uint16_t>(~kDpadUpMask);
+                }
+                break;
+            case ControlTarget::DpadDown:
+                if (mapped_value > 0.5f) {
+                    state.buttons |= kDpadDownMask;
+                } else {
+                    state.buttons &= static_cast<uint16_t>(~kDpadDownMask);
+                }
+                break;
+            case ControlTarget::DpadLeft:
+                if (mapped_value > 0.5f) {
+                    state.buttons |= kDpadLeftMask;
+                } else {
+                    state.buttons &= static_cast<uint16_t>(~kDpadLeftMask);
+                }
+                break;
+            case ControlTarget::DpadRight:
+                if (mapped_value > 0.5f) {
+                    state.buttons |= kDpadRightMask;
+                } else {
+                    state.buttons &= static_cast<uint16_t>(~kDpadRightMask);
+                }
                 break;
         }
         updated = true;
