@@ -1,40 +1,13 @@
 #include "config/ConfigLoader.h"
 
-#include <algorithm>
-#include <filesystem>
 #include <sstream>
 #include <stdexcept>
-#include <vector>
+#include <unordered_map>
 
 #include <yaml-cpp/yaml.h>
 
 namespace config {
 namespace {
-enum class MessageType {
-    Unknown,
-    ValueMsg,
-    GamepadAnalog,
-    StickTwoAxis
-};
-
-MessageType ParseMessageType(const std::string& value) {
-    if (value.empty()) {
-        return MessageType::Unknown;
-    }
-    if (value == "Value::Msg" || value == "Value.Msg") {
-        return MessageType::ValueMsg;
-    }
-    if (value == "Gamepad::Gamepad_Analog" || value == "Gamepad_Analog") {
-        return MessageType::GamepadAnalog;
-    }
-    if (value == "Gamepad::Stick_TwoAxis" || value == "Stick_TwoAxis") {
-        return MessageType::StickTwoAxis;
-    }
-
-    throw std::runtime_error("Unsupported DDS type '" + value +
-                             "'. Expected Gamepad::Gamepad_Analog or Gamepad::Stick_TwoAxis.");
-}
-
 std::string NormalizeFieldName(const std::string& value) {
     const auto pos = value.rfind('.');
     if (pos == std::string::npos) {
@@ -110,150 +83,122 @@ bool OptionalBool(const YAML::Node& node, const std::string& key, bool default_v
     }
     return field.as<bool>();
 }
+
+void ValidateMappingType(const std::string& ddsType,
+                         const std::string& rawField,
+                         const mapper::MappingDefinition& mapping) {
+    if (ddsType == "Gamepad::Gamepad_Analog" || ddsType == "Gamepad_Analog") {
+        if (mapping.field != "value") {
+            throw std::runtime_error("Unsupported field '" + rawField + "' for Gamepad_Analog mapping '" + mapping.name + "'. Expected field: value.");
+        }
+        return;
+    }
+
+    if (ddsType == "Gamepad::Stick_TwoAxis" || ddsType == "Stick_TwoAxis") {
+        if (mapping.field != "x" && mapping.field != "y") {
+            throw std::runtime_error("Unsupported field '" + rawField + "' for Stick_TwoAxis mapping '" + mapping.name + "'. Expected field: x or y.");
+        }
+        if (!IsStickTarget(mapping.target)) {
+            throw std::runtime_error("Unsupported target for Stick_TwoAxis mapping '" + mapping.name + "'. Expected a stick axis target.");
+        }
+        return;
+    }
+
+    throw std::runtime_error("Unsupported DDS type '" + ddsType + "'. Expected Gamepad::Gamepad_Analog or Gamepad::Stick_TwoAxis.");
+}
+
+std::string BuildTopicKey(const DdsConfig& dds) {
+    return dds.topic + "|" + dds.type + "|" + dds.idl_file;
+}
 }  // namespace
 
-AppConfig ConfigLoader::Load(const std::string& path) {
+RoleConfig ConfigLoader::Load(const std::string& path) {
     const YAML::Node root = YAML::LoadFile(path);
     if (!root || !root.IsMap()) {
         throw std::runtime_error("Config file must contain a mapping at the root.");
     }
 
-    const YAML::Node dds_node = root["dds"];
-    if (!dds_node || !dds_node.IsMap()) {
-        throw std::runtime_error("Missing required 'dds' section in config.");
+    const YAML::Node roleNode = root["role"];
+    if (!roleNode || !roleNode.IsMap()) {
+        throw std::runtime_error("Missing required 'role' section in config.");
     }
 
-    AppConfig config;
-    config.dds.topic = RequireString(dds_node, "topic");
-    if (dds_node["type"]) {
-        config.dds.type = dds_node["type"].as<std::string>();
-    }
-    if (dds_node["idl_file"]) {
-        config.dds.idl_file = dds_node["idl_file"].as<std::string>();
+    const YAML::Node mappingsNode = root["mappings"];
+    if (!mappingsNode || !mappingsNode.IsSequence()) {
+        throw std::runtime_error("Missing required 'mappings' list in config.");
     }
 
-    const YAML::Node mappings_node = root["mapping"];
-    if (!mappings_node || !mappings_node.IsSequence()) {
-        throw std::runtime_error("Missing required 'mapping' list in config.");
-    }
+    RoleConfig roleConfig;
+    roleConfig.name = RequireString(roleNode, "name");
+    roleConfig.yoke_id = RequireInt(roleNode, "yoke_id");
 
-    const MessageType message_type = ParseMessageType(config.dds.type);
+    std::unordered_map<std::string, size_t> topicIndex;
 
-    for (const auto& entry : mappings_node) {
+    for (const auto& entry : mappingsNode) {
         if (!entry.IsMap()) {
             throw std::runtime_error("Each mapping entry must be a map.");
         }
 
+        const YAML::Node ddsNode = entry["dds"];
+        if (!ddsNode || !ddsNode.IsMap()) {
+            throw std::runtime_error("Each mapping entry must contain a 'dds' map.");
+        }
+
+        const YAML::Node gamepadNode = entry["gamepad"];
+        if (!gamepadNode || !gamepadNode.IsMap()) {
+            throw std::runtime_error("Each mapping entry must contain a 'gamepad' map.");
+        }
+
+        DdsConfig dds;
+        dds.topic = RequireString(ddsNode, "topic");
+        dds.type = RequireString(ddsNode, "type");
+        dds.idl_file = RequireString(ddsNode, "idl_file");
+
         mapper::MappingDefinition mapping;
         mapping.name = RequireString(entry, "name");
-        mapping.id = RequireInt(entry, "id");
-        const std::string raw_field = RequireString(entry, "field");
-        mapping.field = NormalizeFieldName(raw_field);
-        mapping.target = ParseTarget(RequireString(entry, "to"));
-        mapping.scale = OptionalFloat(entry, "scale", 1.0f);
-        mapping.deadzone = OptionalFloat(entry, "deadzone", 0.0f);
-        mapping.invert = OptionalBool(entry, "invert", false);
+        mapping.id = RequireInt(ddsNode, "id");
 
-        // Optional input range normalization fields. If both are present,
-        // treat input values in [input_min,input_max] as the source range
-        // to normalize from.
-        if (entry["input_min"] && entry["input_max"]) {
-            mapping.input_min = entry["input_min"].as<float>();
-            mapping.input_max = entry["input_max"].as<float>();
+        const std::string rawField = RequireString(ddsNode, "field");
+        mapping.field = NormalizeFieldName(rawField);
+        mapping.target = ParseTarget(RequireString(gamepadNode, "to"));
+        mapping.scale = OptionalFloat(gamepadNode, "scale", 1.0f);
+        mapping.deadzone = OptionalFloat(gamepadNode, "deadzone", 0.0f);
+        mapping.invert = OptionalBool(gamepadNode, "invert", false);
+
+        if (ddsNode["input_min"] && ddsNode["input_max"]) {
+            mapping.input_min = ddsNode["input_min"].as<float>();
+            mapping.input_max = ddsNode["input_max"].as<float>();
             mapping.has_input_range = true;
         }
 
-        if (message_type == MessageType::GamepadAnalog) {
-            if (mapping.field != "value") {
-                std::ostringstream message;
-                message << "Unsupported field '" << raw_field
-                        << "' in mapping '" << mapping.name
-                        << "'. Expected field: value.";
-                throw std::runtime_error(message.str());
-            }
-            if (!IsTriggerTarget(mapping.target)) {
-                std::ostringstream message;
-                message << "Unsupported target for Gamepad_Analog mapping '"
-                        << mapping.name << "'. Expected a trigger axis target.";
-                throw std::runtime_error(message.str());
-            }
-        } else if (message_type == MessageType::StickTwoAxis) {
-            if (mapping.field != "x" && mapping.field != "y") {
-                std::ostringstream message;
-                message << "Unsupported field '" << raw_field
-                        << "' in mapping '" << mapping.name
-                        << "'. Expected field: x or y.";
-                throw std::runtime_error(message.str());
-            }
-            if (!IsStickTarget(mapping.target)) {
-                std::ostringstream message;
-                message << "Unsupported target for Stick_TwoAxis mapping '"
-                        << mapping.name << "'. Expected a stick axis target.";
-                throw std::runtime_error(message.str());
-            }
-        } else if (message_type == MessageType::ValueMsg) {
-            if (mapping.field != "value") {
-                std::ostringstream message;
-                message << "Unsupported field '" << raw_field
-                        << "' in mapping '" << mapping.name
-                        << "'. Expected field: value.";
-                throw std::runtime_error(message.str());
-            }
-        } else if (mapping.field != "value" && mapping.field != "x" &&
-                   mapping.field != "y") {
-            std::ostringstream message;
-            message << "Unsupported field '" << raw_field
-                    << "' in mapping '" << mapping.name
-                    << "'. Expected field: value, x, or y.";
-            throw std::runtime_error(message.str());
-        }
-        if (mapping.deadzone < 0.0f || mapping.deadzone > 1.0f) {
+        ValidateMappingType(dds.type, rawField, mapping);
+
+        if ((IsTriggerTarget(mapping.target) || IsStickTarget(mapping.target)) &&
+            (mapping.deadzone < 0.0f || mapping.deadzone > 1.0f)) {
             std::ostringstream message;
             message << "Invalid deadzone in mapping '" << mapping.name
                     << "'. Expected range 0.0 to 1.0.";
             throw std::runtime_error(message.str());
         }
 
-        config.mappings.push_back(mapping);
+        const std::string key = BuildTopicKey(dds);
+        auto found = topicIndex.find(key);
+        if (found == topicIndex.end()) {
+            AppConfig appConfig;
+            appConfig.dds = dds;
+            appConfig.mappings.push_back(mapping);
+            roleConfig.app_configs.push_back(std::move(appConfig));
+            topicIndex.emplace(key, roleConfig.app_configs.size() - 1);
+            continue;
+        }
+
+        roleConfig.app_configs[found->second].mappings.push_back(mapping);
     }
 
-    if (config.mappings.empty()) {
+    if (roleConfig.app_configs.empty()) {
         throw std::runtime_error("Config must include at least one mapping entry.");
     }
 
-    return config;
-}
-
-std::vector<AppConfig> ConfigLoader::LoadDirectory(const std::string& path) {
-    namespace fs = std::filesystem;
-    std::vector<AppConfig> configs;
-
-    const fs::path root(path);
-    if (!fs::exists(root) || !fs::is_directory(root)) {
-        throw std::runtime_error("Config path must be a directory: " + path);
-    }
-
-    std::vector<fs::path> files;
-    for (const auto& entry : fs::directory_iterator(root)) {
-        if (!entry.is_regular_file()) {
-            continue;
-        }
-        const auto ext = entry.path().extension().string();
-        if (ext == ".yaml" || ext == ".yml") {
-            files.push_back(entry.path());
-        }
-    }
-
-    if (files.empty()) {
-        throw std::runtime_error("Config directory contains no .yaml or .yml files: " + path);
-    }
-
-    std::sort(files.begin(), files.end());
-    configs.reserve(files.size());
-    for (const auto& file : files) {
-        configs.push_back(Load(file.string()));
-    }
-
-    return configs;
+    return roleConfig;
 }
 }  // namespace config

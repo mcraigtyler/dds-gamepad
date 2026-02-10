@@ -264,16 +264,16 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
 {
     _lastError.clear();
 
-    if (options.configDir.empty()) {
-        SetLastError("Missing required configDir.");
+    if (options.configFile.empty()) {
+        SetLastError("Missing required configFile.");
         std::cerr << LastError() << std::endl;
         return EXIT_FAILURE;
     }
 
     try {
-        std::vector<config::AppConfig> configs;
+        config::RoleConfig roleConfig;
         try {
-            configs = config::ConfigLoader::LoadDirectory(options.configDir);
+            roleConfig = config::ConfigLoader::Load(options.configFile);
         } catch (const std::exception& ex) {
             SetLastError(std::string("Failed to load config: ") + ex.what());
             std::cerr << LastError() << std::endl;
@@ -301,11 +301,25 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
 
         using TopicHandler = std::variant<AnalogHandler, StickHandler>;
         std::vector<TopicHandler> handlers;
-        handlers.reserve(configs.size());
-        for (const auto& config : configs) {
+        handlers.reserve(roleConfig.app_configs.size());
+        for (const auto& config : roleConfig.app_configs) {
+            if (options.logStartup && !options.tableMode) {
+                std::cout << "Loaded config file: " << options.configFile << std::endl;
+                std::cout << "Role: " << roleConfig.name << " (yoke_id=" << roleConfig.yoke_id << ")" << std::endl;
+                break;
+            }
+        }
+
+        for (const auto& config : roleConfig.app_configs) {
             if (options.logStartup && !options.tableMode) {
                 std::cout << "Subscribing to '" << config.dds.topic << "' (domain " << options.domainId << ")"
                           << std::endl;
+                for (const auto& mapping : config.mappings) {
+                    std::cout << "  mapping name=" << mapping.name
+                              << " id=" << mapping.id
+                              << " field=" << mapping.field
+                              << std::endl;
+                }
             }
             switch (ParseTopicType(config.dds.type)) {
                 case TopicType::GamepadAnalog:

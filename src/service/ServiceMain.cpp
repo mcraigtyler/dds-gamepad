@@ -124,6 +124,28 @@ std::optional<int> ParseDomainIdFromArgs(int argc, wchar_t** argv)
     return std::nullopt;
 }
 
+
+std::optional<std::string> ParseConfigFileFromArgs(int argc, wchar_t** argv)
+{
+    for (int i = 1; i < argc; ++i) {
+        const std::wstring arg = argv[i];
+
+        if (arg == L"--config-file" || arg == L"--config") {
+            if (i + 1 >= argc) {
+                return std::nullopt;
+            }
+            return std::filesystem::path(argv[i + 1]).string();
+        }
+
+        constexpr std::wstring_view prefix = L"--config-file=";
+        if (arg.rfind(prefix.data(), 0) == 0) {
+            return std::filesystem::path(arg.substr(prefix.size())).string();
+        }
+    }
+
+    return std::nullopt;
+}
+
 std::optional<int> ParseDomainIdFromCommandLine()
 {
     int argc = 0;
@@ -135,6 +157,19 @@ std::optional<int> ParseDomainIdFromCommandLine()
     const auto domainId = ParseDomainIdFromArgs(argc, argv);
     LocalFree(argv);
     return domainId;
+}
+
+std::optional<std::string> ParseConfigFileFromCommandLine()
+{
+    int argc = 0;
+    wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv == nullptr || argc <= 0) {
+        return std::nullopt;
+    }
+
+    const auto configFile = ParseConfigFileFromArgs(argc, argv);
+    LocalFree(argv);
+    return configFile;
 }
 
 std::filesystem::path GetExecutableDirectory()
@@ -199,10 +234,11 @@ void WINAPI ServiceMain(DWORD argc, wchar_t** argv)
     }
 
     const std::filesystem::path exeDir = GetExecutableDirectory();
-    const std::filesystem::path configDir = exeDir / "config";
+    const std::filesystem::path defaultConfigFile = exeDir / "config" / "driver.yaml";
+    const std::string configFile = ParseConfigFileFromCommandLine().value_or(defaultConfigFile.string());
 
     app::AppRunnerOptions options;
-    options.configDir = configDir.string();
+    options.configFile = configFile;
     options.domainId = *domainId;
     options.logRxRaw = false;
     options.tableMode = false;
@@ -214,7 +250,7 @@ void WINAPI ServiceMain(DWORD argc, wchar_t** argv)
 
     if (gEventLog) {
         std::wstring msg = L"Starting runner. domainId=" + std::to_wstring(*domainId) +
-                           L" configDir=" + configDir.wstring();
+                           L" configFile=" + ToWString(configFile);
         gEventLog->Info(msg);
     }
 

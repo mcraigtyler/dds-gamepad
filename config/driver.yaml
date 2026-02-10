@@ -1,7 +1,3 @@
-# Driver role config (role-based schema draft)
-# Merges existing config/steering.yaml + config/throttle.yaml into one file.
-# Note: The current app expects the old per-topic schema; code changes are needed
-# to load this new role-based format.
 
 role:
   name: "Driver"

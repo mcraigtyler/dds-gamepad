@@ -194,13 +194,15 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
         DESTINATION ${INSTALL_DIR}
     )
 
-        # Install top-level config files (YAML) used by the application
-        install(DIRECTORY config/
-            DESTINATION ${INSTALL_DIR}/config
-            FILES_MATCHING PATTERN "*.yaml")
+    # Install role-based config files used by the application.
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/driver.yaml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/gunner.yaml"
+        DESTINATION ${INSTALL_DIR}/config)
 
-        # Service convention: config lives next to the service executable.
-        install(DIRECTORY config/
-            DESTINATION ${INSTALL_DIR}/bin/config
-            FILES_MATCHING PATTERN "*.yaml")
+    # Service convention: config lives next to the service executable.
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/driver.yaml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/gunner.yaml"
+        DESTINATION ${INSTALL_DIR}/bin/config)
 endif()

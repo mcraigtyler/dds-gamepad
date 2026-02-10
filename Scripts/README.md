@@ -8,7 +8,7 @@ These instructions are written to work from **any folder you unzip to**.
 
 - `bin\dds-gamepad.exe` — console app (runs in a terminal)
 - `bin\dds-gamepad-service.exe` — Windows Service binary
-- `bin\config\*.yaml` — configuration files the app/service reads
+- `bin\config\driver.yaml` / `bin\config\gunner.yaml` — role configuration files
 - `install_service.ps1` — install/uninstall/start/stop helper
 - `installers\` — optional prerequisites installers (may be present)
 
@@ -46,7 +46,7 @@ cd C:\dds-gamepad
 3) Install the service (uses the extracted folder as the install root):
 
 ```powershell
-.\install_service.ps1 -Action Install -InstallDir (Resolve-Path .).Path -DomainId 0 -StartType Automatic
+.\install_service.ps1 -Action Install -InstallDir (Resolve-Path .).Path -DomainId 0 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
 ```
 
 4) Start the service:
@@ -71,8 +71,8 @@ cd C:\dds-gamepad
 
 ## Configuration
 
-- The service reads config YAML from: `bin\config\`
-- To change topics/mappings, edit or replace the `*.yaml` files in `bin\config\`.
+- The service reads a single config file (default): `bin\config\driver.yaml`.
+- To run a different role, reinstall with `-ConfigFilePath` set to another role file (for example `bin\config\gunner.yaml`).
 - After changing config, restart the service:
 
 ```powershell
@@ -89,7 +89,7 @@ The service writes lifecycle/errors to **Windows Event Log**:
 Common checks:
 
 - Confirm the service executable exists: `bin\dds-gamepad-service.exe`
-- Confirm config exists: `bin\config\*.yaml`
+- Confirm config exists (example): `bin\config\driver.yaml`
 - Confirm prerequisites installed (VC++ redist + ViGEmBus)
 
 ## Run in console (non-service)
@@ -97,6 +97,6 @@ Common checks:
 If you want to run interactively (useful for debugging), from the ZIP root:
 
 ```powershell
-.\bin\dds-gamepad.exe .\bin\config 0 --table
+.\bin\dds-gamepad.exe .\bin\config\driver.yaml 0 --table
 ```
 Where the `0` indicatest the DomainID to register with.

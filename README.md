@@ -32,54 +32,50 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 
 ## Run DDS Gamepad
 
-The main `dds-gamepad` executable reads every YAML file in a config folder. Each config defines one DDS topic and a single mapping rule. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the target control range.
+The `dds-gamepad` executable now accepts a **single role config file** and domain id.
 
-`.\install\boilerplate-dds\bin\dds-gamepad.exe <config_dir> [domain_id]`
-`.\install\boilerplate-dds\bin\dds-gamepad.exe <config_dir> <domain_id>`
-
-### Example config (one file per topic)
-
-```yaml
-dds:
-  topic: "vehicle.throttle"
-  type: "Gamepad_Analog"
-  idl_file: "idl/Gamepad.idl"
-
-mapping:
-  - name: throttle
-    id: 1
-    field: value
-    to: axis:right_trigger
-    scale: 1.0
-    deadzone: 0.05
-    invert: false
+```powershell
+.\install\boilerplate-dds\bin\dds-gamepad.exe <config_file> <domain_id>
 ```
 
-Steering example using the `Stick_TwoAxis.x` field:
+Example:
+
+```powershell
+.\install\boilerplate-dds\bin\dds-gamepad.exe .\install\boilerplate-dds\config\driver.yaml 0 --table
+```
+
+### Role-based config schema
+
+Configs are role-based (`config/driver.yaml`, `config/gunner.yaml`) and use this shape:
 
 ```yaml
-dds:
-  topic: "vehicle.steering"
-  type: "Stick_TwoAxis"
-  idl_file: "idl/Gamepad.idl"
+role:
+  name: "Driver"
+  yoke_id: 1004
 
-mapping:
+mappings:
   - name: steering
-    id: 2
-    field: x
-    to: axis:left_x
-    scale: 1.0
-    deadzone: 0.05
-    invert: false
+    dds:
+      topic: "Gamepad_Stick_TwoAxis"
+      type: "Gamepad::Stick_TwoAxis"
+      idl_file: "idl/Gamepad.idl"
+      id: 30
+      field: x
+      input_min: -110.0
+      input_max: 110.0
+    gamepad:
+      to: axis:right_x
+      scale: 1.0
+      deadzone: 0.02
+      invert: false
 ```
 
 ### Mapping notes
 
-- Place one YAML file per DDS topic in the config directory.
-- Each config must include exactly one mapping entry.
-- `id` matches `role_id` values coming from DDS.
-- `field` supports `value` for `Gamepad_Analog` and `x` for `Stick_TwoAxis` (steering uses `x` only).
-- `to` supports `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`.
+- One role config file can contain multiple mappings across topics.
+- `dds.id` matches DDS role id values.
+- `dds.field` supports `value`, `x`, and `y` depending on DDS type.
+- `gamepad.to` supports `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`.
 - `scale` is applied before `deadzone` and `invert`.
 - `invert` flips axis direction for sticks or maps triggers as `1.0 - value`.
 
@@ -125,7 +121,7 @@ Compress-Archive -Path install\dds-gamepad\* -DestinationPath release\dds-gamepa
 
 ```powershell
 cd bin
-.\dds-gamepad.exe ..\config
+.\dds-gamepad.exe ..\config\driver.yaml 0
 ```
 
 ## Windows Service
@@ -133,7 +129,7 @@ cd bin
 The install tree also includes a Windows Service binary: `bin\dds-gamepad-service.exe`.
 
 Service conventions:
-- Config directory: `bin\config\` (next to the service executable)
+- Config file: defaults to `bin\config\driver.yaml` (next to the service executable)
 - Domain id: supplied via the service `binPath` argument `--domain-id <n>`
 - Logs: Windows Event Log (Application) under source `dds-gamepad-service`
 
@@ -141,7 +137,7 @@ To install/start/stop the service (run PowerShell as Administrator):
 
 ```powershell
 cd C:\dds-gamepad
-.\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 0 -StartType Automatic
+.\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 0 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
 .\install_service.ps1 -Action Start
 ```
 
@@ -155,4 +151,4 @@ To stop/uninstall:
 Notes:
 - If the `installers` folder is missing from the install tree, place the `vc_redist.x64.exe` and ViGEmBus installer in the `installers` folder before running the installers.
 - The app expects Release builds of third-party DLLs (no `*D.dll` debug runtimes) — ship Release artifacts only.
-- Include the `config` folder contents when packaging so `dds-gamepad.exe` can find YAML files describing topics and mappings.
+- Include `config\driver.yaml` and `config\gunner.yaml` when packaging so both console and service modes can load role mappings.
