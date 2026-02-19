@@ -1,6 +1,7 @@
 # Build and IDE files
 build/
 *.exe
+!artifacts/*.exe
 *.obj
 *.log
 *.tlog

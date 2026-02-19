@@ -210,13 +210,9 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
     endif()
 
     if(WIN32)
-        # Include optional installer binaries from the repository external/ folder
-        set(_external_dir "${CMAKE_CURRENT_SOURCE_DIR}/external")
-        install(FILES
-            "${_external_dir}/ViGEmBus_1.22.0_x64_x86_arm64.exe"
-            "${_external_dir}/vc_redist.x64.exe"
+        # Include installer binaries from the artifacts/ folder
+        install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/artifacts/"
             DESTINATION ${INSTALL_DIR}/installers
-            OPTIONAL
         )
     endif()
 
