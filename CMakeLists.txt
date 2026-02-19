@@ -198,6 +198,7 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/config/driver.yaml"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/gunner.yaml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/combined.yaml"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/README.md"
         DESTINATION ${INSTALL_DIR}/config)
 
@@ -205,6 +206,7 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/config/driver.yaml"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/gunner.yaml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/combined.yaml"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/README.md"
         DESTINATION ${INSTALL_DIR}/bin/config)
 endif()
