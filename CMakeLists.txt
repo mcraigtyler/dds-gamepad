@@ -1,6 +1,40 @@
 cmake_minimum_required(VERSION 3.28.3)
 project(dds-gamepad)
 
+# --- Version (derived from git at configure time) ---
+find_package(Git QUIET)
+if(Git_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_COMMIT_COUNT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_COMMIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+else()
+    set(GIT_COMMIT_COUNT "0")
+    set(GIT_COMMIT_HASH "unknown")
+endif()
+set(APP_VERSION_MAJOR 0)
+set(APP_VERSION_MINOR 3)
+set(APP_VERSION_PATCH ${GIT_COMMIT_COUNT})
+set(APP_VERSION "${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH}")
+set(APP_VERSION_FULL "${APP_VERSION}+${GIT_COMMIT_HASH}")
+message(STATUS "dds-gamepad version: ${APP_VERSION_FULL}")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/version.h"
+)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/version.rc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/version.rc"
+)
+
 if(NOT WIN32)
     message(FATAL_ERROR "dds-gamepad is a Windows-only application")
 endif()
@@ -47,6 +81,7 @@ set(EXE_SOURCES
     src/app/AppRunner.cpp
         src/config/ConfigLoader.cpp
         src/mapper/MappingEngine.cpp
+        ${CMAKE_CURRENT_BINARY_DIR}/version.rc
 )
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
@@ -58,6 +93,7 @@ set(SERVICE_SOURCES
     src/app/AppRunner.cpp
     src/config/ConfigLoader.cpp
     src/mapper/MappingEngine.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/version.rc
 )
 
 add_executable(${SERVICE_EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${SERVICE_SOURCES})
@@ -82,12 +118,14 @@ endif()
 target_include_directories(${EXE_NAME} PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_BINARY_DIR}
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
 
 target_include_directories(${SERVICE_EXE_NAME} PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_BINARY_DIR}
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
 
