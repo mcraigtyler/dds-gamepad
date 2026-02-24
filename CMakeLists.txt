@@ -26,6 +26,9 @@ set(APP_VERSION_PATCH ${GIT_COMMIT_COUNT})
 set(APP_VERSION "${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH}")
 set(APP_VERSION_FULL "${APP_VERSION}+${GIT_COMMIT_HASH}")
 message(STATUS "dds-gamepad version: ${APP_VERSION_FULL}")
+
+# Bootstrap version files at configure time so the build dir is populated
+# before the first build runs.
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in"
     "${CMAKE_CURRENT_BINARY_DIR}/version.h"
@@ -33,6 +36,22 @@ configure_file(
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/version.rc.in"
     "${CMAKE_CURRENT_BINARY_DIR}/version.rc"
+)
+
+# Regenerate version files at build time so new commits are picked up
+# without a manual reconfigure.
+add_custom_target(generate_version ALL
+    COMMAND ${CMAKE_COMMAND}
+        -DGIT_EXECUTABLE=${GIT_EXECUTABLE}
+        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DVERSION_MAJOR=${APP_VERSION_MAJOR}
+        -DVERSION_MINOR=${APP_VERSION_MINOR}
+        -DHEADER_TEMPLATE=${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in
+        -DRC_TEMPLATE=${CMAKE_CURRENT_SOURCE_DIR}/src/version.rc.in
+        -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -DCMAKE_COMMAND=${CMAKE_COMMAND}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 if(NOT WIN32)
@@ -85,6 +104,7 @@ set(EXE_SOURCES
 )
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
+add_dependencies(${EXE_NAME} generate_version)
 
 set(SERVICE_SOURCES
     src/service/ServiceMain.cpp
@@ -97,6 +117,8 @@ set(SERVICE_SOURCES
 )
 
 add_executable(${SERVICE_EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${SERVICE_SOURCES})
+add_dependencies(${SERVICE_EXE_NAME} generate_version)
+
 target_link_libraries(${EXE_NAME}
     PRIVATE
         ${IDL_LIB}
