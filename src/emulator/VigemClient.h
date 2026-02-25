@@ -17,7 +17,6 @@ public:
     virtual ~IVigemClient() = default;
     virtual bool Connect() = 0;
     virtual bool AddX360Controller() = 0;
-    virtual bool UpdateRightTrigger(uint8_t value) = 0;
     virtual bool UpdateState(const mapper::GamepadState& state) = 0;
     virtual std::string LastError() const = 0;
 };
@@ -34,7 +33,7 @@ public:
 
     bool Connect() override;
     bool AddX360Controller() override;
-    bool UpdateRightTrigger(uint8_t value) override;
+    bool UpdateRightTrigger(uint8_t value);  // used by vigem_sanity; not part of IVigemClient
     bool UpdateState(const mapper::GamepadState& state) override;
     std::string LastError() const override;
 
