@@ -10,6 +10,7 @@
 #include <Windows.h>
 
 #include "app/AppRunner.h"
+#include "version.h"
 
 void print_usage(const char* exe)
 {
@@ -24,6 +25,7 @@ void print_usage(const char* exe)
     std::cerr << "Options:" << std::endl;
     std::cerr << "  --debug            Enable verbose raw input logging (rx_raw...)." << std::endl;
     std::cerr << "  --table            Live table + a tx state line (no scrolling)." << std::endl;
+    std::cerr << "  --version          Print version and exit." << std::endl;
     std::cerr << "  -h, --help         Show this help text." << std::endl;
 }
 
@@ -63,6 +65,10 @@ int main(int argc, char* argv[])
     std::optional<int> yoke_id;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
+        if (arg == "--version") {
+            std::cout << APP_VERSION_FULL << std::endl;
+            return EXIT_SUCCESS;
+        }
         if (arg == "-h" || arg == "--help") {
             print_usage(argv[0]);
             return EXIT_SUCCESS;

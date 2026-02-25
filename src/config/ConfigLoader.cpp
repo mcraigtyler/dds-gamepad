@@ -208,6 +208,7 @@ RoleConfig ConfigLoader::Load(const std::string& path) {
         mapping.scale = OptionalFloat(gamepadNode, "scale", 1.0f);
         mapping.deadzone = OptionalFloat(gamepadNode, "deadzone", 0.0f);
         mapping.invert = OptionalBool(gamepadNode, "invert", false);
+        mapping.additive = OptionalBool(gamepadNode, "additive", false);
 
         if (ddsNode["input_min"] && ddsNode["input_max"]) {
             mapping.input_min = ddsNode["input_min"].as<float>();

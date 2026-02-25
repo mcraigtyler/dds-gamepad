@@ -43,7 +43,15 @@ uint8_t TriggerFromNormalized(float value) {
 }  // namespace
 
 MappingEngine::MappingEngine(std::vector<MappingDefinition> mappings)
-    : mappings_(std::move(mappings)) {}
+    : mappings_(std::move(mappings)) {
+    // Seed every additive mapping at 0 so sources that haven't sent yet
+    // contribute nothing to the sum.
+    for (const auto& m : mappings_) {
+        if (m.additive) {
+            additive_state_[m.name] = 0.0f;
+        }
+    }
+}
 
 bool MappingEngine::Apply(const std::string& field, int message_id, float value, GamepadState& state) const {
     bool updated = false;
@@ -106,6 +114,44 @@ bool MappingEngine::Apply(const std::string& field, int message_id, float value,
             case ControlTarget::DpadRight:
                 mapped_value = (mapped_value > 0.5f) ? 1.0f : 0.0f;
                 break;
+        }
+
+        // For additive stick/trigger targets: store this source's contribution
+        // and write the sum of all additive contributions for this axis.
+        // This correctly handles sources that arrive in separate read batches —
+        // each source's last known value is retained until it sends a new one.
+        if (mapping.additive) {
+            additive_state_[mapping.name] = mapped_value;
+            float sum = 0.0f;
+            for (const auto& m : mappings_) {
+                if (m.additive && m.target == mapping.target) {
+                    sum += additive_state_.at(m.name);
+                }
+            }
+            switch (mapping.target) {
+                case ControlTarget::LeftTrigger:
+                    state.left_trigger = TriggerFromNormalized(std::clamp(sum, 0.0f, 1.0f));
+                    break;
+                case ControlTarget::RightTrigger:
+                    state.right_trigger = TriggerFromNormalized(std::clamp(sum, 0.0f, 1.0f));
+                    break;
+                case ControlTarget::LeftStickX:
+                    state.left_stick_x = AxisFromNormalized(std::clamp(sum, -1.0f, 1.0f));
+                    break;
+                case ControlTarget::LeftStickY:
+                    state.left_stick_y = AxisFromNormalized(std::clamp(sum, -1.0f, 1.0f));
+                    break;
+                case ControlTarget::RightStickX:
+                    state.right_stick_x = AxisFromNormalized(std::clamp(sum, -1.0f, 1.0f));
+                    break;
+                case ControlTarget::RightStickY:
+                    state.right_stick_y = AxisFromNormalized(std::clamp(sum, -1.0f, 1.0f));
+                    break;
+                default:
+                    break;
+            }
+            updated = true;
+            continue;
         }
 
         switch (mapping.target) {

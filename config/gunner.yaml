@@ -103,8 +103,9 @@ mappings:
     gamepad:
       to: axis:left_y
       scale: 1.0
-      deadzone: 0.02
+      deadzone: 0.06
       invert: false
+      additive: true
 
   - name: turret_pitch_down
     dds:
@@ -116,5 +117,27 @@ mappings:
     gamepad:
       to: axis:left_y
       scale: 1.0
-      deadzone: 0.02
+      deadzone: 0.06
       invert: true
+      additive: true
+
+  - name: WhiteBlackHot_Toggle
+    dds:
+      topic: "Gamepad_Button"
+      type: "Gamepad::Button"
+      idl_file: "idl/Gamepad.idl"
+      id: 21
+      field: btnState
+    gamepad:
+      to: button:y
+
+  - name: DayIR_Toggle
+    dds:
+      topic: "Gamepad_Button"
+      type: "Gamepad::Button"
+      idl_file: "idl/Gamepad.idl"
+      id: 22
+      field: btnState
+    gamepad:
+      to: button:b
+

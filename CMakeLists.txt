@@ -1,6 +1,59 @@
 cmake_minimum_required(VERSION 3.28.3)
 project(dds-gamepad)
 
+# --- Version (derived from git at configure time) ---
+find_package(Git QUIET)
+if(Git_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_COMMIT_COUNT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_COMMIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+else()
+    set(GIT_COMMIT_COUNT "0")
+    set(GIT_COMMIT_HASH "unknown")
+endif()
+set(APP_VERSION_MAJOR 0)
+set(APP_VERSION_MINOR 3)
+set(APP_VERSION_PATCH ${GIT_COMMIT_COUNT})
+set(APP_VERSION "${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH}")
+set(APP_VERSION_FULL "${APP_VERSION}+${GIT_COMMIT_HASH}")
+message(STATUS "dds-gamepad version: ${APP_VERSION_FULL}")
+
+# Bootstrap version files at configure time so the build dir is populated
+# before the first build runs.
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/version.h"
+)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/version.rc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/version.rc"
+)
+
+# Regenerate version files at build time so new commits are picked up
+# without a manual reconfigure.
+add_custom_target(generate_version ALL
+    COMMAND ${CMAKE_COMMAND}
+        -DGIT_EXECUTABLE=${GIT_EXECUTABLE}
+        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DVERSION_MAJOR=${APP_VERSION_MAJOR}
+        -DVERSION_MINOR=${APP_VERSION_MINOR}
+        -DHEADER_TEMPLATE=${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in
+        -DRC_TEMPLATE=${CMAKE_CURRENT_SOURCE_DIR}/src/version.rc.in
+        -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -DCMAKE_COMMAND=${CMAKE_COMMAND}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 if(NOT WIN32)
     message(FATAL_ERROR "dds-gamepad is a Windows-only application")
 endif()
@@ -47,9 +100,11 @@ set(EXE_SOURCES
     src/app/AppRunner.cpp
         src/config/ConfigLoader.cpp
         src/mapper/MappingEngine.cpp
+        ${CMAKE_CURRENT_BINARY_DIR}/version.rc
 )
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
+add_dependencies(${EXE_NAME} generate_version)
 
 set(SERVICE_SOURCES
     src/service/ServiceMain.cpp
@@ -58,9 +113,12 @@ set(SERVICE_SOURCES
     src/app/AppRunner.cpp
     src/config/ConfigLoader.cpp
     src/mapper/MappingEngine.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/version.rc
 )
 
 add_executable(${SERVICE_EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${SERVICE_SOURCES})
+add_dependencies(${SERVICE_EXE_NAME} generate_version)
+
 target_link_libraries(${EXE_NAME}
     PRIVATE
         ${IDL_LIB}
@@ -82,12 +140,14 @@ endif()
 target_include_directories(${EXE_NAME} PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_BINARY_DIR}
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
 
 target_include_directories(${SERVICE_EXE_NAME} PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_BINARY_DIR}
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
 
@@ -172,13 +232,9 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
     endif()
 
     if(WIN32)
-        # Include optional installer binaries from the repository external/ folder
-        set(_external_dir "${CMAKE_CURRENT_SOURCE_DIR}/external")
-        install(FILES
-            "${_external_dir}/ViGEmBus_1.22.0_x64_x86_arm64.exe"
-            "${_external_dir}/vc_redist.x64.exe"
+        # Include installer binaries from the artifacts/ folder
+        install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/artifacts/"
             DESTINATION ${INSTALL_DIR}/installers
-            OPTIONAL
         )
     endif()
 
@@ -198,6 +254,7 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/config/driver.yaml"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/gunner.yaml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/combined.yaml"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/README.md"
         DESTINATION ${INSTALL_DIR}/config)
 
@@ -205,6 +262,7 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/config/driver.yaml"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/gunner.yaml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/combined.yaml"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/README.md"
         DESTINATION ${INSTALL_DIR}/bin/config)
 endif()

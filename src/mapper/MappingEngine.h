@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "mapper/GamepadState.h"
@@ -38,6 +39,11 @@ struct MappingDefinition {
     bool has_input_range = false;
     float input_min = 0.0f;
     float input_max = 1.0f;
+    // When true, this mapping's contribution is summed with other additive
+    // mappings targeting the same axis rather than replacing the axis value.
+    // The engine tracks each source's last contribution so batches from
+    // different sources don't interfere.
+    bool additive = false;
 };
 
 class MappingEngine {
@@ -48,5 +54,9 @@ public:
 
 private:
     std::vector<MappingDefinition> mappings_;
+    // Stores the last computed contribution (after scale/invert/deadzone) for
+    // each additive mapping, keyed by mapping name. Initialised to 0 so that
+    // sources which haven't yet sent a message contribute nothing to the sum.
+    mutable std::unordered_map<std::string, float> additive_state_;
 };
 }  // namespace mapper
