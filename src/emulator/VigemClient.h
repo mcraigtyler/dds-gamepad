@@ -3,30 +3,11 @@
 #include <cstdint>
 #include <string>
 
-#include "mapper/GamepadState.h"
+#include "emulator/IOutputDevice.h"
 
 namespace emulator {
-class ITxStateListener {
-public:
-    virtual ~ITxStateListener() = default;
-    virtual void OnTxState(const mapper::GamepadState& state) = 0;
-};
 
-class IVigemClient {
-public:
-    virtual ~IVigemClient() = default;
-    // Startup methods throw std::runtime_error on failure.
-    virtual void Connect() = 0;
-    virtual void AddX360Controller() = 0;
-    // Hot-path update: returns false on failure; inspect LastError() for details.
-    virtual bool UpdateState(const mapper::GamepadState& state) = 0;
-    virtual std::string LastError() const = 0;
-    // Optional: default no-ops so mock/test implementations need not override.
-    virtual void SetLogState(bool) {}
-    virtual void SetTxStateListener(ITxStateListener*) {}
-};
-
-class VigemClient final : public IVigemClient {
+class VigemClient final : public IOutputDevice {
 public:
     VigemClient();
     ~VigemClient() override;
@@ -37,13 +18,13 @@ public:
     VigemClient& operator=(VigemClient&&) = delete;
 
     void Connect() override;
-    void AddX360Controller() override;
-    bool UpdateRightTrigger(uint8_t value);  // used by vigem_sanity; not part of IVigemClient
+    void AddX360Controller();
+    bool UpdateRightTrigger(uint8_t value);  // used by vigem_sanity; not part of IOutputDevice
     bool UpdateState(const mapper::GamepadState& state) override;
     std::string LastError() const override;
 
-    void SetLogState(bool enabled);
-    void SetTxStateListener(ITxStateListener* listener);
+    void SetLogState(bool enabled) override;
+    void SetTxStateListener(ITxStateListener* listener) override;
 
 private:
     void SetError(const std::string& message);
