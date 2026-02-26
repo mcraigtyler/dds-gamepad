@@ -444,16 +444,8 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
         }
 
         emulator::VigemClient client;
-        if (!client.Connect()) {
-            SetLastError(std::string("Failed to connect to ViGEm: ") + client.LastError());
-            std::cerr << LastError() << std::endl;
-            return EXIT_FAILURE;
-        }
-        if (!client.AddX360Controller()) {
-            SetLastError(std::string("Failed to add Xbox 360 controller: ") + client.LastError());
-            std::cerr << LastError() << std::endl;
-            return EXIT_FAILURE;
-        }
+        client.Connect();           // throws std::runtime_error on failure
+        client.AddX360Controller(); // throws std::runtime_error on failure
 
         // Console mode keeps previous behavior: log tx state unless table mode.
         // Service mode should set logTxState=false to avoid per-sample output.

@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 
 namespace emulator {
 namespace {
@@ -66,60 +67,49 @@ VigemClient::~VigemClient() {
     Disconnect();
 }
 
-bool VigemClient::Connect() {
-    ResetError();
-
+void VigemClient::Connect() {
     if (!client_) {
         client_ = vigem_alloc();
         if (!client_) {
-            SetError("Failed to allocate ViGEm client.");
-            return false;
+            throw std::runtime_error("Failed to allocate ViGEm client.");
         }
     }
 
     if (connected_) {
-        return true;
+        return;
     }
 
     const auto status = vigem_connect(static_cast<PVIGEM_CLIENT>(client_));
     if (!VIGEM_SUCCESS(status)) {
-        SetError("vigem_connect failed: " + StatusToString(status));
-        return false;
+        throw std::runtime_error("vigem_connect failed: " + StatusToString(status));
     }
 
     connected_ = true;
-    return true;
 }
 
-bool VigemClient::AddX360Controller() {
-    ResetError();
-
+void VigemClient::AddX360Controller() {
     if (!connected_) {
-        SetError("ViGEm client is not connected.");
-        return false;
+        throw std::runtime_error("ViGEm client is not connected.");
     }
 
     if (!target_) {
         target_ = vigem_target_x360_alloc();
         if (!target_) {
-            SetError("Failed to allocate Xbox 360 target.");
-            return false;
+            throw std::runtime_error("Failed to allocate Xbox 360 target.");
         }
     }
 
     if (controller_added_) {
-        return true;
+        return;
     }
 
     const auto status = vigem_target_add(static_cast<PVIGEM_CLIENT>(client_),
                                          static_cast<PVIGEM_TARGET>(target_));
     if (!VIGEM_SUCCESS(status)) {
-        SetError("vigem_target_add failed: " + StatusToString(status));
-        return false;
+        throw std::runtime_error("vigem_target_add failed: " + StatusToString(status));
     }
 
     controller_added_ = true;
-    return true;
 }
 
 bool VigemClient::UpdateRightTrigger(uint8_t value) {
