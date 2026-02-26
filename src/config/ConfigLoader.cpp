@@ -16,71 +16,85 @@ std::string NormalizeFieldName(const std::string& value) {
     return value.substr(pos + 1);
 }
 
-bool IsTriggerTarget(mapper::ControlTarget target) {
-    return target == mapper::ControlTarget::LeftTrigger ||
-           target == mapper::ControlTarget::RightTrigger;
+common::TopicType ParseTopicType(const std::string& type) {
+    if (type == "Gamepad::Gamepad_Analog" || type == "Gamepad_Analog") {
+        return common::TopicType::GamepadAnalog;
+    }
+    if (type == "Gamepad::Stick_TwoAxis" || type == "Stick_TwoAxis") {
+        return common::TopicType::StickTwoAxis;
+    }
+    if (type == "Gamepad::Button" || type == "Button") {
+        return common::TopicType::GamepadButton;
+    }
+    throw std::runtime_error("Unsupported DDS type '" + type +
+                             "'. Expected Gamepad::Gamepad_Analog, Gamepad::Stick_TwoAxis, or Gamepad::Button.");
 }
 
-bool IsStickTarget(mapper::ControlTarget target) {
-    return target == mapper::ControlTarget::LeftStickX ||
-           target == mapper::ControlTarget::LeftStickY ||
-           target == mapper::ControlTarget::RightStickX ||
-           target == mapper::ControlTarget::RightStickY;
+bool IsTriggerTarget(common::ControlTarget target) {
+    return target == common::ControlTarget::LeftTrigger ||
+           target == common::ControlTarget::RightTrigger;
 }
 
-bool IsButtonTarget(mapper::ControlTarget target) {
-    return target == mapper::ControlTarget::ButtonA ||
-           target == mapper::ControlTarget::ButtonB ||
-           target == mapper::ControlTarget::ButtonX ||
-           target == mapper::ControlTarget::ButtonY ||
-           target == mapper::ControlTarget::DpadUp ||
-           target == mapper::ControlTarget::DpadDown ||
-           target == mapper::ControlTarget::DpadLeft ||
-           target == mapper::ControlTarget::DpadRight;
+bool IsStickTarget(common::ControlTarget target) {
+    return target == common::ControlTarget::LeftStickX ||
+           target == common::ControlTarget::LeftStickY ||
+           target == common::ControlTarget::RightStickX ||
+           target == common::ControlTarget::RightStickY;
 }
 
-mapper::ControlTarget ParseTarget(const std::string& value) {
+bool IsButtonTarget(common::ControlTarget target) {
+    return target == common::ControlTarget::ButtonA ||
+           target == common::ControlTarget::ButtonB ||
+           target == common::ControlTarget::ButtonX ||
+           target == common::ControlTarget::ButtonY ||
+           target == common::ControlTarget::DpadUp ||
+           target == common::ControlTarget::DpadDown ||
+           target == common::ControlTarget::DpadLeft ||
+           target == common::ControlTarget::DpadRight;
+}
+
+common::ControlTarget ParseTarget(const std::string& value) {
     if (value == "axis:left_trigger") {
-        return mapper::ControlTarget::LeftTrigger;
+        return common::ControlTarget::LeftTrigger;
     }
     if (value == "axis:right_trigger") {
-        return mapper::ControlTarget::RightTrigger;
+        return common::ControlTarget::RightTrigger;
     }
     if (value == "axis:left_x") {
-        return mapper::ControlTarget::LeftStickX;
+        return common::ControlTarget::LeftStickX;
     }
     if (value == "axis:left_y") {
-        return mapper::ControlTarget::LeftStickY;
+        return common::ControlTarget::LeftStickY;
     }
     if (value == "axis:right_x") {
-        return mapper::ControlTarget::RightStickX;
+        return common::ControlTarget::RightStickX;
     }
     if (value == "axis:right_y") {
-        return mapper::ControlTarget::RightStickY;
+        return common::ControlTarget::RightStickY;
     }
     if (value == "button:a") {
-        return mapper::ControlTarget::ButtonA;
+        return common::ControlTarget::ButtonA;
     }
     if (value == "button:b") {
-        return mapper::ControlTarget::ButtonB;
+        return common::ControlTarget::ButtonB;
     }
     if (value == "button:x") {
-        return mapper::ControlTarget::ButtonX;
+        return common::ControlTarget::ButtonX;
     }
     if (value == "button:y") {
-        return mapper::ControlTarget::ButtonY;
+        return common::ControlTarget::ButtonY;
     }
     if (value == "dpad:up") {
-        return mapper::ControlTarget::DpadUp;
+        return common::ControlTarget::DpadUp;
     }
     if (value == "dpad:down") {
-        return mapper::ControlTarget::DpadDown;
+        return common::ControlTarget::DpadDown;
     }
     if (value == "dpad:left") {
-        return mapper::ControlTarget::DpadLeft;
+        return common::ControlTarget::DpadLeft;
     }
     if (value == "dpad:right") {
-        return mapper::ControlTarget::DpadRight;
+        return common::ControlTarget::DpadRight;
     }
 
     throw std::runtime_error("Unsupported mapping target '" + value +
@@ -121,7 +135,7 @@ bool OptionalBool(const YAML::Node& node, const std::string& key, bool default_v
 
 void ValidateMappingType(const std::string& ddsType,
                          const std::string& rawField,
-                         const mapper::MappingDefinition& mapping) {
+                         const common::MappingDefinition& mapping) {
     if (ddsType == "Gamepad::Gamepad_Analog" || ddsType == "Gamepad_Analog") {
         if (mapping.field != "value") {
             throw std::runtime_error("Unsupported field '" + rawField + "' for Gamepad_Analog mapping '" + mapping.name + "'. Expected field: value.");
@@ -198,7 +212,7 @@ RoleConfig ConfigLoader::Load(const std::string& path) {
         dds.type = RequireString(ddsNode, "type");
         dds.idl_file = RequireString(ddsNode, "idl_file");
 
-        mapper::MappingDefinition mapping;
+        common::MappingDefinition mapping;
         mapping.name = RequireString(entry, "name");
         mapping.id = RequireInt(ddsNode, "id");
 
@@ -231,6 +245,7 @@ RoleConfig ConfigLoader::Load(const std::string& path) {
         if (found == topicIndex.end()) {
             AppConfig appConfig;
             appConfig.dds = dds;
+            appConfig.topicType = ParseTopicType(dds.type);
             appConfig.mappings.push_back(mapping);
             roleConfig.app_configs.push_back(std::move(appConfig));
             topicIndex.emplace(key, roleConfig.app_configs.size() - 1);

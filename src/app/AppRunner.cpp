@@ -27,29 +27,6 @@ namespace app
 {
 namespace
 {
-enum class TopicType {
-    GamepadAnalog,
-    StickTwoAxis,
-    GamepadButton
-};
-
-TopicType ParseTopicType(const std::string& type)
-{
-    if (type == "Gamepad::Gamepad_Analog" || type == "Gamepad_Analog") {
-        return TopicType::GamepadAnalog;
-    }
-    if (type == "Gamepad::Stick_TwoAxis" || type == "Stick_TwoAxis") {
-        return TopicType::StickTwoAxis;
-    }
-    if (type == "Gamepad::Button" || type == "Button") {
-        return TopicType::GamepadButton;
-    }
-
-    throw std::runtime_error("Unsupported DDS type '" + type +
-                             "'. Expected Gamepad::Gamepad_Analog, Gamepad::Stick_TwoAxis, or Gamepad::Button.");
-}
-
-
 template <typename T, typename = void>
 struct HasHasValue : std::false_type {};
 
@@ -507,20 +484,20 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
                               << std::endl;
                 }
             }
-            switch (ParseTopicType(config.dds.type)) {
-                case TopicType::GamepadAnalog:
+            switch (config.topicType) {
+                case common::TopicType::GamepadAnalog:
                     handlers.emplace_back(AnalogHandler(participant,
                                                         subscriber,
                                                         config.dds.topic,
                                                         mapper::MappingEngine(config.mappings)));
                     break;
-                case TopicType::StickTwoAxis:
+                case common::TopicType::StickTwoAxis:
                     handlers.emplace_back(StickHandler(participant,
                                                        subscriber,
                                                        config.dds.topic,
                                                        mapper::MappingEngine(config.mappings)));
                     break;
-                case TopicType::GamepadButton:
+                case common::TopicType::GamepadButton:
                     handlers.emplace_back(ButtonHandler(participant,
                                                         subscriber,
                                                         config.dds.topic,

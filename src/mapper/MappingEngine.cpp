@@ -6,6 +6,12 @@
 
 
 namespace mapper {
+
+// Bring common types into this namespace so existing switch/case code
+// continues to compile without change after the move to common::.
+using common::ControlTarget;
+using common::MappingDefinition;
+
 namespace {
 constexpr uint16_t kDpadUpMask = 0x0001;
 constexpr uint16_t kDpadDownMask = 0x0002;
