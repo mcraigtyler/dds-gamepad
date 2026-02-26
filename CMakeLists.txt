@@ -101,6 +101,7 @@ set(EXE_SOURCES
     src/app/StatusPoller.cpp
         src/config/ConfigLoader.cpp
         src/mapper/MappingEngine.cpp
+        src/emulator/UdpProtobufEmulator.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/version.rc
 )
 
@@ -115,6 +116,7 @@ set(SERVICE_SOURCES
     src/app/StatusPoller.cpp
     src/config/ConfigLoader.cpp
     src/mapper/MappingEngine.cpp
+    src/emulator/UdpProtobufEmulator.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/version.rc
 )
 

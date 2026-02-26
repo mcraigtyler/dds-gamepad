@@ -21,6 +21,7 @@
 #include "config/ConfigLoader.h"
 #include "dds_includes.h"
 #include "emulator/IOutputDevice.h"
+#include "emulator/UdpProtobufEmulator.h"
 #include "emulator/VigemClient.h"
 #include "mapper/MappingEngine.h"
 
@@ -422,8 +423,16 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
         }
     }
 
+    if (backendType == "udp_protobuf") {
+        const config::OutputConfig& outputCfg = roleConfig.output;
+        emulator::UdpProtobufEmulator udp(
+            emulator::UdpProtobufConfig{outputCfg.host, outputCfg.port});
+        udp.Connect();
+        return Run(options, udp, stopToken);
+    }
+
     SetLastError("Unknown output backend '" + backendType +
-                 "'. Supported types: vigem_x360.");
+                 "'. Supported types: vigem_x360, udp_protobuf.");
     std::cerr << LastError() << std::endl;
     return EXIT_FAILURE;
 }
