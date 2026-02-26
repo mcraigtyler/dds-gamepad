@@ -4,7 +4,7 @@
 
 #include "app/StopToken.h"
 
-namespace emulator { class IVigemClient; }
+namespace emulator { class IOutputDevice; }
 
 namespace app
 {
@@ -27,9 +27,9 @@ class AppRunner
 public:
     // Convenience overload: constructs a VigemClient internally.
     int Run(const AppRunnerOptions& options, const StopToken& stopToken);
-    // Core overload: caller supplies the virtual controller (enables testing).
+    // Core overload: caller supplies the output device (enables testing).
     int Run(const AppRunnerOptions& options,
-            emulator::IVigemClient& client,
+            emulator::IOutputDevice& client,
             const StopToken& stopToken);
     const std::string& LastError() const noexcept;
 

@@ -19,6 +19,7 @@
 #include "console/RxTable.h"
 #include "config/ConfigLoader.h"
 #include "dds_includes.h"
+#include "emulator/IOutputDevice.h"
 #include "emulator/VigemClient.h"
 #include "mapper/MappingEngine.h"
 
@@ -300,7 +301,7 @@ struct MessageTraits<Gamepad::Button> {
 template <typename MsgT>
 bool ProcessSamples(TopicHandler<MsgT>& handler,
                     mapper::GamepadState& state,
-                    emulator::IVigemClient& client,
+                    emulator::IOutputDevice& client,
                     const RxOutput& output,
                     int yokeId)
 {
@@ -404,7 +405,7 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
 }
 
 int AppRunner::Run(const AppRunnerOptions& options,
-                   emulator::IVigemClient& client,
+                   emulator::IOutputDevice& client,
                    const StopToken& stopToken)
 {
     _lastError.clear();
