@@ -3,9 +3,10 @@
 #include <string>
 #include <vector>
 
-#include "mapper/MappingEngine.h"
+#include "common/MappingDefinition.h"
 
 namespace config {
+
 struct DdsConfig {
     std::string topic;
     std::string type;
@@ -14,7 +15,10 @@ struct DdsConfig {
 
 struct AppConfig {
     DdsConfig dds;
-    std::vector<mapper::MappingDefinition> mappings;
+    // TopicType is resolved from dds.type during Load() so AppRunner never
+    // needs to do string comparisons at setup time.
+    common::TopicType topicType = common::TopicType::GamepadAnalog;
+    std::vector<common::MappingDefinition> mappings;
 };
 
 struct RoleConfig {
@@ -26,4 +30,5 @@ class ConfigLoader {
 public:
     static RoleConfig Load(const std::string& path);
 };
+
 }  // namespace config

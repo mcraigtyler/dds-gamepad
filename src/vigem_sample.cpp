@@ -7,13 +7,11 @@
 int main() {
     emulator::VigemClient client;
 
-    if (!client.Connect()) {
-        std::cerr << "Failed to connect to ViGEm: " << client.LastError() << "\n";
-        return 1;
-    }
-
-    if (!client.AddX360Controller()) {
-        std::cerr << "Failed to add Xbox 360 controller: " << client.LastError() << "\n";
+    try {
+        client.Connect();
+        client.AddX360Controller();
+    } catch (const std::runtime_error& e) {
+        std::cerr << "ViGEm setup failed: " << e.what() << "\n";
         return 1;
     }
 
