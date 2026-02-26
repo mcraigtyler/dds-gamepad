@@ -2,26 +2,14 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 
 namespace mapper {
 
-// Bring common types into this namespace so existing switch/case code
-// continues to compile without change after the move to common::.
-using common::ControlTarget;
+using common::ChannelType;
 using common::MappingDefinition;
 
 namespace {
-constexpr uint16_t kDpadUpMask = 0x0001;
-constexpr uint16_t kDpadDownMask = 0x0002;
-constexpr uint16_t kDpadLeftMask = 0x0004;
-constexpr uint16_t kDpadRightMask = 0x0008;
-constexpr uint16_t kButtonAMask = 0x1000;
-constexpr uint16_t kButtonBMask = 0x2000;
-constexpr uint16_t kButtonXMask = 0x4000;
-constexpr uint16_t kButtonYMask = 0x8000;
-
 float ApplyDeadzone(float value, float deadzone) {
     if (deadzone <= 0.0f) {
         return value;
@@ -30,21 +18,6 @@ float ApplyDeadzone(float value, float deadzone) {
         return 0.0f;
     }
     return value;
-}
-
-int16_t AxisFromNormalized(float value) {
-    if (value <= -1.0f) {
-        return std::numeric_limits<int16_t>::min();
-    }
-    if (value >= 1.0f) {
-        return std::numeric_limits<int16_t>::max();
-    }
-    return static_cast<int16_t>(std::lround(value * static_cast<float>(std::numeric_limits<int16_t>::max())));
-}
-
-uint8_t TriggerFromNormalized(float value) {
-    const float clamped = std::clamp(value, 0.0f, 1.0f);
-    return static_cast<uint8_t>(std::lround(clamped * 255.0f));
 }
 }  // namespace
 
@@ -59,7 +32,7 @@ MappingEngine::MappingEngine(std::vector<MappingDefinition> mappings)
     }
 }
 
-bool MappingEngine::Apply(const std::string& field, int message_id, float value, GamepadState& state) {
+bool MappingEngine::Apply(const std::string& field, int message_id, float value, common::OutputState& state) {
     bool updated = false;
     for (const auto& mapping : mappings_) {
         if (mapping.field != field) {
@@ -78,52 +51,39 @@ bool MappingEngine::Apply(const std::string& field, int message_id, float value,
             const float in_max = mapping.input_max;
             if (in_max != in_min) {
                 const float t = (value - in_min) / (in_max - in_min);
-                // For triggers (0..1)
-                if (mapping.target == ControlTarget::LeftTrigger ||
-                    mapping.target == ControlTarget::RightTrigger) {
-                    mapped_value = t;
+                if (mapping.channelType == ChannelType::Trigger) {
+                    mapped_value = t;  // 0..1
                 } else {
-                    // For sticks: map 0..1 -> -1..1
-                    mapped_value = t * 2.0f - 1.0f;
+                    mapped_value = t * 2.0f - 1.0f;  // -1..1
                 }
             } else {
                 mapped_value = 0.0f;
             }
         }
         mapped_value = mapped_value * mapping.scale;
-        switch (mapping.target) {
-            case ControlTarget::LeftTrigger:
-            case ControlTarget::RightTrigger:
+
+        switch (mapping.channelType) {
+            case ChannelType::Trigger:
                 if (mapping.invert) {
                     mapped_value = 1.0f - mapped_value;
                 }
                 mapped_value = ApplyDeadzone(mapped_value, mapping.deadzone);
                 mapped_value = std::clamp(mapped_value, 0.0f, 1.0f);
                 break;
-            case ControlTarget::LeftStickX:
-            case ControlTarget::LeftStickY:
-            case ControlTarget::RightStickX:
-            case ControlTarget::RightStickY:
+            case ChannelType::Axis:
                 if (mapping.invert) {
                     mapped_value = -mapped_value;
                 }
                 mapped_value = ApplyDeadzone(mapped_value, mapping.deadzone);
                 mapped_value = std::clamp(mapped_value, -1.0f, 1.0f);
                 break;
-            case ControlTarget::ButtonA:
-            case ControlTarget::ButtonB:
-            case ControlTarget::ButtonX:
-            case ControlTarget::ButtonY:
-            case ControlTarget::DpadUp:
-            case ControlTarget::DpadDown:
-            case ControlTarget::DpadLeft:
-            case ControlTarget::DpadRight:
+            case ChannelType::Button:
                 mapped_value = (mapped_value > 0.5f) ? 1.0f : 0.0f;
                 break;
         }
 
-        // For additive stick/trigger targets: store this source's contribution
-        // and write the sum of all additive contributions for this axis.
+        // For additive targets: store this source's contribution and write the
+        // sum of all additive contributions for this channel.
         // This correctly handles sources that arrive in separate read batches —
         // each source's last known value is retained until it sends a new one.
         if (mapping.additive) {
@@ -134,108 +94,17 @@ bool MappingEngine::Apply(const std::string& field, int message_id, float value,
                     sum += additive_state_.at(m.name);
                 }
             }
-            switch (mapping.target) {
-                case ControlTarget::LeftTrigger:
-                    state.left_trigger = TriggerFromNormalized(std::clamp(sum, 0.0f, 1.0f));
-                    break;
-                case ControlTarget::RightTrigger:
-                    state.right_trigger = TriggerFromNormalized(std::clamp(sum, 0.0f, 1.0f));
-                    break;
-                case ControlTarget::LeftStickX:
-                    state.left_stick_x = AxisFromNormalized(std::clamp(sum, -1.0f, 1.0f));
-                    break;
-                case ControlTarget::LeftStickY:
-                    state.left_stick_y = AxisFromNormalized(std::clamp(sum, -1.0f, 1.0f));
-                    break;
-                case ControlTarget::RightStickX:
-                    state.right_stick_x = AxisFromNormalized(std::clamp(sum, -1.0f, 1.0f));
-                    break;
-                case ControlTarget::RightStickY:
-                    state.right_stick_y = AxisFromNormalized(std::clamp(sum, -1.0f, 1.0f));
-                    break;
-                default:
-                    break;
+            if (mapping.channelType == ChannelType::Trigger) {
+                sum = std::clamp(sum, 0.0f, 1.0f);
+            } else {
+                sum = std::clamp(sum, -1.0f, 1.0f);
             }
+            state.channels[mapping.target] = sum;
             updated = true;
             continue;
         }
 
-        switch (mapping.target) {
-            case ControlTarget::LeftTrigger:
-                state.left_trigger = TriggerFromNormalized(mapped_value);
-                break;
-            case ControlTarget::RightTrigger:
-                state.right_trigger = TriggerFromNormalized(mapped_value);
-                break;
-            case ControlTarget::LeftStickX:
-                state.left_stick_x = AxisFromNormalized(mapped_value);
-                break;
-            case ControlTarget::LeftStickY:
-                state.left_stick_y = AxisFromNormalized(mapped_value);
-                break;
-            case ControlTarget::RightStickX:
-                state.right_stick_x = AxisFromNormalized(mapped_value);
-                break;
-            case ControlTarget::RightStickY:
-                state.right_stick_y = AxisFromNormalized(mapped_value);
-                break;
-            case ControlTarget::ButtonA:
-                if (mapped_value > 0.5f) {
-                    state.buttons |= kButtonAMask;
-                } else {
-                    state.buttons &= static_cast<uint16_t>(~kButtonAMask);
-                }
-                break;
-            case ControlTarget::ButtonB:
-                if (mapped_value > 0.5f) {
-                    state.buttons |= kButtonBMask;
-                } else {
-                    state.buttons &= static_cast<uint16_t>(~kButtonBMask);
-                }
-                break;
-            case ControlTarget::ButtonX:
-                if (mapped_value > 0.5f) {
-                    state.buttons |= kButtonXMask;
-                } else {
-                    state.buttons &= static_cast<uint16_t>(~kButtonXMask);
-                }
-                break;
-            case ControlTarget::ButtonY:
-                if (mapped_value > 0.5f) {
-                    state.buttons |= kButtonYMask;
-                } else {
-                    state.buttons &= static_cast<uint16_t>(~kButtonYMask);
-                }
-                break;
-            case ControlTarget::DpadUp:
-                if (mapped_value > 0.5f) {
-                    state.buttons |= kDpadUpMask;
-                } else {
-                    state.buttons &= static_cast<uint16_t>(~kDpadUpMask);
-                }
-                break;
-            case ControlTarget::DpadDown:
-                if (mapped_value > 0.5f) {
-                    state.buttons |= kDpadDownMask;
-                } else {
-                    state.buttons &= static_cast<uint16_t>(~kDpadDownMask);
-                }
-                break;
-            case ControlTarget::DpadLeft:
-                if (mapped_value > 0.5f) {
-                    state.buttons |= kDpadLeftMask;
-                } else {
-                    state.buttons &= static_cast<uint16_t>(~kDpadLeftMask);
-                }
-                break;
-            case ControlTarget::DpadRight:
-                if (mapped_value > 0.5f) {
-                    state.buttons |= kDpadRightMask;
-                } else {
-                    state.buttons &= static_cast<uint16_t>(~kDpadRightMask);
-                }
-                break;
-        }
+        state.channels[mapping.target] = mapped_value;
         updated = true;
     }
 
