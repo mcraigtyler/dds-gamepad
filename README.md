@@ -51,6 +51,13 @@ Configs are role-based (`config/driver.yaml`, `config/gunner.yaml`) and use this
 ```yaml
 role:
   name: "Driver"
+
+# Optional — selects the output backend. Defaults to vigem_x360 if absent.
+output:
+  type: vigem_x360        # "vigem_x360" or "udp_protobuf"
+  # host: 192.168.1.100   # udp_protobuf only
+  # port: 5000            # udp_protobuf only
+
 mappings:
   - name: steering
     dds:
@@ -61,20 +68,24 @@ mappings:
       field: x
       input_min: -110.0
       input_max: 110.0
-    gamepad:
+    output:               # also accepted: gamepad: (legacy alias)
       to: axis:right_x
       scale: 1.0
       deadzone: 0.02
       invert: false
+      # type: axis        # optional: axis | trigger | button
+                          # inferred from the "to" prefix for vigem_x360 targets;
+                          # required for udp_protobuf custom field names
 ```
 
 ### Mapping notes
 
 - One role config file can contain multiple mappings across topics.
 - `dds.id` matches DDS role id values.
-- `yoke_id` is no longer configured in YAML; pass it on the command line as `<yoke_id>` (or `--yoke-id` for service mode).
+- `yoke_id` is not configured in YAML; pass it on the command line as `<yoke_id>` (or `--yoke-id` for service mode).
 - `dds.field` supports `value`, `x`, and `y` depending on DDS type.
-- `gamepad.to` supports `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`, `button:a`, `button:b`, `button:x`, `button:y`, `dpad:up`, `dpad:down`, `dpad:left`, `dpad:right`.
+- `output.to` (or `gamepad.to`) for `vigem_x360`: `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`, `button:a`, `button:b`, `button:x`, `button:y`, `dpad:up`, `dpad:down`, `dpad:left`, `dpad:right`.
+- For `udp_protobuf`, `output.to` is the protobuf field name used verbatim; set `output.type` explicitly.
 - `scale` is applied before `deadzone` and `invert`.
 - `invert` flips axis direction for sticks or maps triggers as `1.0 - value`.
 
