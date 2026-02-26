@@ -385,20 +385,47 @@ private:
 
 int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
 {
-    try {
-        emulator::VigemClient client;
-        client.Connect();           // throws std::runtime_error on failure
-        client.AddX360Controller(); // throws std::runtime_error on failure
-        return Run(options, client, stopToken);
-    } catch (const std::exception& ex) {
-        SetLastError(std::string("ViGEm setup failed: ") + ex.what());
-        std::cerr << LastError() << std::endl;
-        return EXIT_FAILURE;
-    } catch (...) {
-        SetLastError("ViGEm setup failed: unknown exception.");
+    // Load config early so we can select the right output backend before
+    // constructing it. The inner Run() overload will load it again; that
+    // redundant parse is acceptable for a startup-only code path.
+    if (options.configFile.empty()) {
+        SetLastError("Missing required configFile.");
         std::cerr << LastError() << std::endl;
         return EXIT_FAILURE;
     }
+
+    config::RoleConfig roleConfig;
+    try {
+        roleConfig = config::ConfigLoader::Load(options.configFile);
+    } catch (const std::exception& ex) {
+        SetLastError(std::string("Failed to load config: ") + ex.what());
+        std::cerr << LastError() << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    const std::string& backendType = roleConfig.output.type;
+
+    if (backendType == "vigem_x360") {
+        try {
+            emulator::VigemClient client;
+            client.Connect();           // throws std::runtime_error on failure
+            client.AddX360Controller(); // throws std::runtime_error on failure
+            return Run(options, client, stopToken);
+        } catch (const std::exception& ex) {
+            SetLastError(std::string("ViGEm setup failed: ") + ex.what());
+            std::cerr << LastError() << std::endl;
+            return EXIT_FAILURE;
+        } catch (...) {
+            SetLastError("ViGEm setup failed: unknown exception.");
+            std::cerr << LastError() << std::endl;
+            return EXIT_FAILURE;
+        }
+    }
+
+    SetLastError("Unknown output backend '" + backendType +
+                 "'. Supported types: vigem_x360.");
+    std::cerr << LastError() << std::endl;
+    return EXIT_FAILURE;
 }
 
 int AppRunner::Run(const AppRunnerOptions& options,

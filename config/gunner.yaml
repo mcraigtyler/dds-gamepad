@@ -2,6 +2,9 @@
 role:
   name: "Gunner"
 
+output:
+  type: vigem_x360
+
 mappings:
   # -------- Buttons (Gamepad::Button / Gamepad_Button) --------
   - name: fire_3
@@ -11,7 +14,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 3
       field: btnState
-    gamepad:
+    output:
       to: button:a
 
   - name: fire_6
@@ -21,7 +24,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 6
       field: btnState
-    gamepad:
+    output:
       to: button:a
 
   - name: swap_projectile
@@ -31,7 +34,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 7
       field: btnState
-    gamepad:
+    output:
       to: button:x
 
   - name: coax_select
@@ -41,7 +44,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 4
       field: btnState
-    gamepad:
+    output:
       to: dpad:left
 
   - name: main_gun_select
@@ -51,7 +54,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 5
       field: btnState
-    gamepad:
+    output:
       to: dpad:right
 
   - name: zoom_12x
@@ -61,7 +64,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 2
       field: btnState
-    gamepad:
+    output:
       to: dpad:up
 
   - name: zoom_3x
@@ -71,7 +74,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 1
       field: btnState
-    gamepad:
+    output:
       to: dpad:down
 
   # -------- Analog / Stick (Turret) --------
@@ -85,7 +88,7 @@ mappings:
       field: x
       input_min: -110.0
       input_max: 110.0
-    gamepad:
+    output:
       to: axis:left_x
       scale: 1.0
       deadzone: 0.02
@@ -100,7 +103,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 2
       field: value
-    gamepad:
+    output:
       to: axis:left_y
       scale: 1.0
       deadzone: 0.06
@@ -114,7 +117,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 1
       field: value
-    gamepad:
+    output:
       to: axis:left_y
       scale: 1.0
       deadzone: 0.06
@@ -128,7 +131,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 21
       field: btnState
-    gamepad:
+    output:
       to: button:y
 
   - name: DayIR_Toggle
@@ -138,6 +141,5 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 22
       field: btnState
-    gamepad:
+    output:
       to: button:b
-
