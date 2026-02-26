@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "common/MappingDefinition.h"
-#include "mapper/GamepadState.h"
+#include "common/OutputState.h"
 
 namespace mapper {
 
@@ -13,7 +13,7 @@ class MappingEngine {
 public:
     explicit MappingEngine(std::vector<common::MappingDefinition> mappings);
 
-    bool Apply(const std::string& field, int message_id, float value, GamepadState& state);
+    bool Apply(const std::string& field, int message_id, float value, common::OutputState& state);
 
 private:
     std::vector<common::MappingDefinition> mappings_;

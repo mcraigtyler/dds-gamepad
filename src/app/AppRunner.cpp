@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "app/StatusPoller.h"
+#include "common/OutputState.h"
 #include "console/RxTable.h"
 #include "config/ConfigLoader.h"
 #include "dds_includes.h"
@@ -197,7 +198,7 @@ struct MessageTraits<Gamepad::Gamepad_Analog> {
     }
 
     static bool Apply(const Gamepad::Gamepad_Analog& data, int messageId,
-                      mapper::MappingEngine& engine, mapper::GamepadState& state)
+                      mapper::MappingEngine& engine, common::OutputState& state)
     {
         return engine.Apply("value", messageId, static_cast<float>(data.value()), state);
     }
@@ -231,7 +232,7 @@ struct MessageTraits<Gamepad::Stick_TwoAxis> {
     }
 
     static bool Apply(const Gamepad::Stick_TwoAxis& data, int messageId,
-                      mapper::MappingEngine& engine, mapper::GamepadState& state)
+                      mapper::MappingEngine& engine, common::OutputState& state)
     {
         bool updated = engine.Apply("x", messageId, static_cast<float>(data.x()), state);
         updated = engine.Apply("y", messageId, static_cast<float>(data.y()), state) || updated;
@@ -278,7 +279,7 @@ struct MessageTraits<Gamepad::Button> {
     }
 
     static bool Apply(const Gamepad::Button& data, int messageId,
-                      mapper::MappingEngine& engine, mapper::GamepadState& state)
+                      mapper::MappingEngine& engine, common::OutputState& state)
     {
         Common::ButtonState_t btnState = Common::ButtonState_t::Invalid;
         TryReadButtonState(data.btnState(), btnState);
@@ -300,7 +301,7 @@ struct MessageTraits<Gamepad::Button> {
 
 template <typename MsgT>
 bool ProcessSamples(TopicHandler<MsgT>& handler,
-                    mapper::GamepadState& state,
+                    common::OutputState& state,
                     emulator::IOutputDevice& client,
                     const RxOutput& output,
                     int yokeId)
@@ -362,21 +363,17 @@ public:
     {
     }
 
-    void OnTxState(const mapper::GamepadState& txState) override
+    void OnTxState(const common::OutputState& txState) override
     {
         if (_table == nullptr) {
             return;
         }
 
         std::ostringstream out;
-        out << "state"
-            << " LT=" << static_cast<int>(txState.left_trigger)
-            << " RT=" << static_cast<int>(txState.right_trigger)
-            << " LX=" << txState.left_stick_x
-            << " LY=" << txState.left_stick_y
-            << " RX=" << txState.right_stick_x
-            << " RY=" << txState.right_stick_y
-            << " Btn=0x" << std::hex << txState.buttons << std::dec;
+        out << "state";
+        for (const auto& [key, val] : txState.channels) {
+            out << " " << key << "=" << std::fixed << std::setprecision(3) << val;
+        }
         _table->SetTxStateLine(out.str());
     }
 
@@ -481,7 +478,7 @@ int AppRunner::Run(const AppRunnerOptions& options,
             }
         }
 
-    mapper::GamepadState state;
+    common::OutputState state;
 
     console::RxTable table;
     console::RxTable* tablePtr = nullptr;

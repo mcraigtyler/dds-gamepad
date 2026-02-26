@@ -7,30 +7,24 @@
 
 namespace common {
 
-// Identifies which Xbox 360 virtual-controller output a mapping writes to.
-enum class ControlTarget {
-    LeftTrigger,
-    RightTrigger,
-    LeftStickX,
-    LeftStickY,
-    RightStickX,
-    RightStickY,
-    ButtonA,
-    ButtonB,
-    ButtonX,
-    ButtonY,
-    DpadUp,
-    DpadDown,
-    DpadLeft,
-    DpadRight
+// Describes how a float value should be normalised for its output channel.
+// Used by MappingEngine to apply deadzone and clamping in the correct range,
+// and by backends to convert the normalised float to a native wire type.
+enum class ChannelType {
+    Axis,     // normalised float in [-1, 1]; sticks
+    Trigger,  // normalised float in [0, 1]; triggers
+    Button    // binary 0.0 or 1.0
 };
 
-// Describes a single DDS-value → gamepad-output mapping, as parsed from YAML.
+// Describes a single DDS-value → output-channel mapping, as parsed from YAML.
 struct MappingDefinition {
     std::string name;
     int id = 0;
     std::string field;
-    ControlTarget target = ControlTarget::RightTrigger;
+    // Raw `output.to` string from the YAML config; used as the OutputState channel key
+    // and (for UDP backends) as the protobuf field name.
+    std::string target;
+    ChannelType channelType = ChannelType::Axis;
     float scale = 1.0f;
     float deadzone = 0.0f;
     bool invert = false;

@@ -30,75 +30,20 @@ common::TopicType ParseTopicType(const std::string& type) {
                              "'. Expected Gamepad::Gamepad_Analog, Gamepad::Stick_TwoAxis, or Gamepad::Button.");
 }
 
-bool IsTriggerTarget(common::ControlTarget target) {
-    return target == common::ControlTarget::LeftTrigger ||
-           target == common::ControlTarget::RightTrigger;
-}
-
-bool IsStickTarget(common::ControlTarget target) {
-    return target == common::ControlTarget::LeftStickX ||
-           target == common::ControlTarget::LeftStickY ||
-           target == common::ControlTarget::RightStickX ||
-           target == common::ControlTarget::RightStickY;
-}
-
-bool IsButtonTarget(common::ControlTarget target) {
-    return target == common::ControlTarget::ButtonA ||
-           target == common::ControlTarget::ButtonB ||
-           target == common::ControlTarget::ButtonX ||
-           target == common::ControlTarget::ButtonY ||
-           target == common::ControlTarget::DpadUp ||
-           target == common::ControlTarget::DpadDown ||
-           target == common::ControlTarget::DpadLeft ||
-           target == common::ControlTarget::DpadRight;
-}
-
-common::ControlTarget ParseTarget(const std::string& value) {
-    if (value == "axis:left_trigger") {
-        return common::ControlTarget::LeftTrigger;
+// Infers the ChannelType from the `output.to` target string.
+// The trigger channels use the "axis:" prefix but a [0, 1] range.
+// Unknown prefixes default to Axis for forward compatibility with custom backends.
+common::ChannelType InferChannelType(const std::string& target) {
+    if (target == "axis:left_trigger" || target == "axis:right_trigger") {
+        return common::ChannelType::Trigger;
     }
-    if (value == "axis:right_trigger") {
-        return common::ControlTarget::RightTrigger;
+    if (target.rfind("axis:", 0) == 0) {
+        return common::ChannelType::Axis;
     }
-    if (value == "axis:left_x") {
-        return common::ControlTarget::LeftStickX;
+    if (target.rfind("button:", 0) == 0 || target.rfind("dpad:", 0) == 0) {
+        return common::ChannelType::Button;
     }
-    if (value == "axis:left_y") {
-        return common::ControlTarget::LeftStickY;
-    }
-    if (value == "axis:right_x") {
-        return common::ControlTarget::RightStickX;
-    }
-    if (value == "axis:right_y") {
-        return common::ControlTarget::RightStickY;
-    }
-    if (value == "button:a") {
-        return common::ControlTarget::ButtonA;
-    }
-    if (value == "button:b") {
-        return common::ControlTarget::ButtonB;
-    }
-    if (value == "button:x") {
-        return common::ControlTarget::ButtonX;
-    }
-    if (value == "button:y") {
-        return common::ControlTarget::ButtonY;
-    }
-    if (value == "dpad:up") {
-        return common::ControlTarget::DpadUp;
-    }
-    if (value == "dpad:down") {
-        return common::ControlTarget::DpadDown;
-    }
-    if (value == "dpad:left") {
-        return common::ControlTarget::DpadLeft;
-    }
-    if (value == "dpad:right") {
-        return common::ControlTarget::DpadRight;
-    }
-
-    throw std::runtime_error("Unsupported mapping target '" + value +
-                             "'. Expected axis:left_trigger, axis:right_trigger, axis:left_x, axis:left_y, axis:right_x, axis:right_y, button:a, button:b, button:x, button:y, dpad:up, dpad:down, dpad:left, dpad:right.");
+    return common::ChannelType::Axis;
 }
 
 std::string RequireString(const YAML::Node& node, const std::string& key) {
@@ -147,7 +92,7 @@ void ValidateMappingType(const std::string& ddsType,
         if (mapping.field != "x" && mapping.field != "y") {
             throw std::runtime_error("Unsupported field '" + rawField + "' for Stick_TwoAxis mapping '" + mapping.name + "'. Expected field: x or y.");
         }
-        if (!IsStickTarget(mapping.target)) {
+        if (mapping.channelType != common::ChannelType::Axis) {
             throw std::runtime_error("Unsupported target for Stick_TwoAxis mapping '" + mapping.name + "'. Expected a stick axis target.");
         }
         return;
@@ -157,7 +102,7 @@ void ValidateMappingType(const std::string& ddsType,
         if (mapping.field != "btnState") {
             throw std::runtime_error("Unsupported field '" + rawField + "' for Button mapping '" + mapping.name + "'. Expected field: btnState.");
         }
-        if (!IsButtonTarget(mapping.target)) {
+        if (mapping.channelType != common::ChannelType::Button) {
             throw std::runtime_error("Unsupported target for Button mapping '" + mapping.name + "'. Expected a button or dpad target.");
         }
         return;
@@ -218,7 +163,11 @@ RoleConfig ConfigLoader::Load(const std::string& path) {
 
         const std::string rawField = RequireString(ddsNode, "field");
         mapping.field = NormalizeFieldName(rawField);
-        mapping.target = ParseTarget(RequireString(gamepadNode, "to"));
+
+        const std::string targetStr = RequireString(gamepadNode, "to");
+        mapping.target = targetStr;
+        mapping.channelType = InferChannelType(targetStr);
+
         mapping.scale = OptionalFloat(gamepadNode, "scale", 1.0f);
         mapping.deadzone = OptionalFloat(gamepadNode, "deadzone", 0.0f);
         mapping.invert = OptionalBool(gamepadNode, "invert", false);
@@ -232,7 +181,8 @@ RoleConfig ConfigLoader::Load(const std::string& path) {
 
         ValidateMappingType(dds.type, rawField, mapping);
 
-        if ((IsTriggerTarget(mapping.target) || IsStickTarget(mapping.target)) &&
+        if ((mapping.channelType == common::ChannelType::Trigger ||
+             mapping.channelType == common::ChannelType::Axis) &&
             (mapping.deadzone < 0.0f || mapping.deadzone > 1.0f)) {
             std::ostringstream message;
             message << "Invalid deadzone in mapping '" << mapping.name

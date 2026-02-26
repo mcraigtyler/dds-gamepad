@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "mapper/GamepadState.h"
+#include "common/OutputState.h"
 
 namespace emulator {
 
@@ -12,20 +12,19 @@ namespace emulator {
 class ITxStateListener {
 public:
     virtual ~ITxStateListener() = default;
-    virtual void OnTxState(const mapper::GamepadState& state) = 0;
+    virtual void OnTxState(const common::OutputState& state) = 0;
 };
 
 // Generic output-device interface.
-// Implementations write the current GamepadState to a physical or virtual
+// Implementations write the current OutputState to a physical or virtual
 // destination (ViGEmBus, UDP socket, …).
-// NOTE: Phase 2 will replace GamepadState with the backend-agnostic OutputState.
 class IOutputDevice {
 public:
     virtual ~IOutputDevice() = default;
     // Startup — throws std::runtime_error on failure.
     virtual void Connect() = 0;
     // Hot-path update — returns false on failure; inspect LastError() for details.
-    virtual bool UpdateState(const mapper::GamepadState& state) = 0;
+    virtual bool UpdateState(const common::OutputState& state) = 0;
     virtual std::string LastError() const = 0;
     // Optional: default no-ops so minimal implementations need not override.
     virtual void SetLogState(bool) {}
