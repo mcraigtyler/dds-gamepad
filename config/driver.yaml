@@ -2,6 +2,9 @@
 role:
   name: "Driver"
 
+output:
+  type: vigem_x360
+
 mappings:
   - name: steering
     dds:
@@ -12,7 +15,7 @@ mappings:
       field: x
       input_min: -110.0
       input_max: 110.0
-    gamepad:
+    output:
       to: axis:right_x
       scale: 1.0
       deadzone: 0.02
@@ -25,7 +28,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 2
       field: value
-    gamepad:
+    output:
       to: axis:right_trigger
       scale: 1.0
       deadzone: 0.05
@@ -38,7 +41,7 @@ mappings:
       idl_file: "idl/Gamepad.idl"
       id: 1
       field: value
-    gamepad:
+    output:
       to: axis:left_trigger
       scale: 1.0
       deadzone: 0.05
