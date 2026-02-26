@@ -20,7 +20,7 @@ public:
     void Connect() override;
     void AddX360Controller();
     bool UpdateRightTrigger(uint8_t value);  // used by vigem_sanity; not part of IOutputDevice
-    bool UpdateState(const mapper::GamepadState& state) override;
+    bool UpdateState(const common::OutputState& state) override;
     std::string LastError() const override;
 
     void SetLogState(bool enabled) override;
