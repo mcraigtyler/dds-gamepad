@@ -344,7 +344,7 @@ The changes below are sequenced so that each step compiles and passes any existi
 
 ### Phase 3 — AppRunner Decomposition
 
-**Goal:** Break the monolithic `Run()` into focused classes.
+**Goal:** Break the monolithic `Run()` into focused classes, and close the last error-handling inconsistency.
 
 6. **[4.9] Promote `TableTxStateListener` and `StatusSource`** to anonymous-namespace scope in `AppRunner.cpp`. No behaviour change; just refactoring within the file.
 
@@ -357,11 +357,15 @@ The changes below are sequenced so that each step compiles and passes any existi
    - Existing `Run(options, stopToken)` constructs `VigemClient` and delegates — preserving the public API.
    - `ServiceMain.cpp` and `main.cpp` continue to work unchanged.
 
+9. **[4.7 follow-up] Unify `UpdateState()` failure logging.**
+   - `UpdateState()` retains its `bool` return (hot-path; a ViGEm runtime failure is a distinct concern from startup).
+   - The `AppRunner` main-loop error path currently writes directly to `std::cerr`. Route it through `SetLastError()` + `std::cerr` so all fatal errors produce the same format, consistent with startup failures caught by the outer `try/catch`.
+
 ### Phase 4 — Handler Deduplication
 
 **Goal:** Replace 3×handler structs + 3×process functions with one template each.
 
-9. **[4.2] Template the handler struct.**
+10. **[4.2] Template the handler struct.**
    - Create `TopicHandler<MsgT>` in `AppRunner.cpp` anonymous namespace.
    - Define `MessageTraits<Gamepad::Gamepad_Analog>`, `MessageTraits<Gamepad::Stick_TwoAxis>`, `MessageTraits<Gamepad::Button>` with `Apply()` and `Format()` static methods.
    - Replace `ProcessAnalogSamples`, `ProcessStickSamples`, `ProcessButtonSamples` with one `ProcessSamples<MsgT>()` template.
@@ -371,7 +375,7 @@ The changes below are sequenced so that each step compiles and passes any existi
 
 **Goal:** Prevent Windows headers leaking through public headers.
 
-10. **[4.5] Pimpl `RxTable`.**
+11. **[4.5] Pimpl `RxTable`.**
     - Move all Windows API members to `RxTable::Impl` in `RxTable.cpp`.
     - `RxTable.h` includes no platform headers.
     - Adds a proper move constructor (currently deleted).

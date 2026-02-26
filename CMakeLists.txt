@@ -98,6 +98,7 @@ set(EXE_SOURCES
         src/main.cpp
     src/console/RxTable.cpp
     src/app/AppRunner.cpp
+    src/app/StatusPoller.cpp
         src/config/ConfigLoader.cpp
         src/mapper/MappingEngine.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/version.rc
@@ -111,6 +112,7 @@ set(SERVICE_SOURCES
     src/service/EventLog.cpp
     src/console/RxTable.cpp
     src/app/AppRunner.cpp
+    src/app/StatusPoller.cpp
     src/config/ConfigLoader.cpp
     src/mapper/MappingEngine.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/version.rc

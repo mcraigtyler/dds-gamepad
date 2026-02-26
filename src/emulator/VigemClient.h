@@ -21,6 +21,9 @@ public:
     // Hot-path update: returns false on failure; inspect LastError() for details.
     virtual bool UpdateState(const mapper::GamepadState& state) = 0;
     virtual std::string LastError() const = 0;
+    // Optional: default no-ops so mock/test implementations need not override.
+    virtual void SetLogState(bool) {}
+    virtual void SetTxStateListener(ITxStateListener*) {}
 };
 
 class VigemClient final : public IVigemClient {

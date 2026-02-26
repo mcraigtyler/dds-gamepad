@@ -15,6 +15,7 @@
 #include <variant>
 #include <vector>
 
+#include "app/StatusPoller.h"
 #include "console/RxTable.h"
 #include "config/ConfigLoader.h"
 #include "dds_includes.h"
@@ -214,7 +215,7 @@ struct ButtonHandler {
 
 bool ProcessAnalogSamples(AnalogHandler& handler,
                           mapper::GamepadState& state,
-                          emulator::VigemClient& client,
+                          emulator::IVigemClient& client,
                           const RxOutput& output,
                           int yokeId)
 {
@@ -248,7 +249,6 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
         }
 
         if (!client.UpdateState(state)) {
-            std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
             return false;
         }
 
@@ -264,7 +264,7 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
 
 bool ProcessStickSamples(StickHandler& handler,
                          mapper::GamepadState& state,
-                         emulator::VigemClient& client,
+                         emulator::IVigemClient& client,
                          const RxOutput& output,
                          int yokeId)
 {
@@ -303,7 +303,6 @@ bool ProcessStickSamples(StickHandler& handler,
         }
 
         if (!client.UpdateState(state)) {
-            std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
             return false;
         }
 
@@ -321,7 +320,7 @@ bool ProcessStickSamples(StickHandler& handler,
 
 bool ProcessButtonSamples(ButtonHandler& handler,
                           mapper::GamepadState& state,
-                          emulator::VigemClient& client,
+                          emulator::IVigemClient& client,
                           const RxOutput& output,
                           int yokeId)
 {
@@ -376,7 +375,6 @@ bool ProcessButtonSamples(ButtonHandler& handler,
         }
 
         if (!client.UpdateState(state)) {
-            std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
             return false;
         }
 
@@ -391,29 +389,6 @@ bool ProcessButtonSamples(ButtonHandler& handler,
     return true;
 }
 
-std::string FormatReaderStatus(dds::sub::AnyDataReader& reader, double rxRatePerSecondPerIdAvg, size_t uniqueIdCount)
-{
-    const auto matched = reader.subscription_matched_status();
-    const auto liveliness = reader.liveliness_changed_status();
-    const auto qos = reader.requested_incompatible_qos_status();
-    const auto deadline = reader.requested_deadline_missed_status();
-    const auto lost = reader.sample_lost_status();
-    const auto rejected = reader.sample_rejected_status();
-
-    std::ostringstream out;
-    out << std::fixed << std::setprecision(1)
-        << "rate=" << rxRatePerSecondPerIdAvg << "/s"
-        << " ids=" << uniqueIdCount
-        << " writers=" << matched.current_count()
-        << " alive=" << liveliness.alive_count()
-        << " notAlive=" << liveliness.not_alive_count()
-        << " qosIncompat=" << qos.total_count()
-        << " deadlineMiss=" << deadline.total_count()
-        << " lost=" << lost.total_count()
-        << " rejected=" << rejected.total_count();
-    return out.str();
-}
-
 void SleepWithStop(const StopToken& stopToken, std::chrono::milliseconds duration)
 {
     const auto end = std::chrono::steady_clock::now() + duration;
@@ -421,9 +396,60 @@ void SleepWithStop(const StopToken& stopToken, std::chrono::milliseconds duratio
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 }
+
+class TableTxStateListener final : public emulator::ITxStateListener
+{
+public:
+    explicit TableTxStateListener(console::RxTable* tablePtr)
+        : _table(tablePtr)
+    {
+    }
+
+    void OnTxState(const mapper::GamepadState& txState) override
+    {
+        if (_table == nullptr) {
+            return;
+        }
+
+        std::ostringstream out;
+        out << "state"
+            << " LT=" << static_cast<int>(txState.left_trigger)
+            << " RT=" << static_cast<int>(txState.right_trigger)
+            << " LX=" << txState.left_stick_x
+            << " LY=" << txState.left_stick_y
+            << " RX=" << txState.right_stick_x
+            << " RY=" << txState.right_stick_y
+            << " Btn=0x" << std::hex << txState.buttons << std::dec;
+        _table->SetTxStateLine(out.str());
+    }
+
+private:
+    console::RxTable* _table;
+};
+
 } // namespace
 
 int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
+{
+    try {
+        emulator::VigemClient client;
+        client.Connect();           // throws std::runtime_error on failure
+        client.AddX360Controller(); // throws std::runtime_error on failure
+        return Run(options, client, stopToken);
+    } catch (const std::exception& ex) {
+        SetLastError(std::string("ViGEm setup failed: ") + ex.what());
+        std::cerr << LastError() << std::endl;
+        return EXIT_FAILURE;
+    } catch (...) {
+        SetLastError("ViGEm setup failed: unknown exception.");
+        std::cerr << LastError() << std::endl;
+        return EXIT_FAILURE;
+    }
+}
+
+int AppRunner::Run(const AppRunnerOptions& options,
+                   emulator::IVigemClient& client,
+                   const StopToken& stopToken)
 {
     _lastError.clear();
 
@@ -442,10 +468,6 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
             std::cerr << LastError() << std::endl;
             return EXIT_FAILURE;
         }
-
-        emulator::VigemClient client;
-        client.Connect();           // throws std::runtime_error on failure
-        client.AddX360Controller(); // throws std::runtime_error on failure
 
         // Console mode keeps previous behavior: log tx state unless table mode.
         // Service mode should set logTxState=false to avoid per-sample output.
@@ -523,116 +545,30 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
         output.logRx = options.logRx && !options.tableMode;
         output.table = tablePtr;
 
-    class TableTxStateListener final : public emulator::ITxStateListener
-    {
-    public:
-        explicit TableTxStateListener(console::RxTable* tablePtr)
-            : _table(tablePtr)
-        {
-        }
-
-        void OnTxState(const mapper::GamepadState& txState) override
-        {
-            if (_table == nullptr) {
-                return;
-            }
-
-            std::ostringstream out;
-            out << "state"
-                << " LT=" << static_cast<int>(txState.left_trigger)
-                << " RT=" << static_cast<int>(txState.right_trigger)
-                << " LX=" << txState.left_stick_x
-                << " LY=" << txState.left_stick_y
-                << " RX=" << txState.right_stick_x
-                << " RY=" << txState.right_stick_y
-                << " Btn=0x" << std::hex << txState.buttons << std::dec;
-            _table->SetTxStateLine(out.str());
-        }
-
-    private:
-        console::RxTable* _table;
-    };
-
     TableTxStateListener txListener(tablePtr);
     if (options.tableMode) {
         client.SetTxStateListener(&txListener);
     }
 
-    struct StatusSource {
-        std::string topic;
-        dds::sub::AnyDataReader reader;
-        uint64_t* totalValidSamples = nullptr;
-        std::unordered_set<std::string>* seenIds = nullptr;
-        uint64_t lastTotalValidSamples = 0;
-        bool hasLastTotal = false;
-
-        StatusSource(std::string topicName,
-                     const dds::sub::AnyDataReader& anyReader,
-                     uint64_t* totalSamples,
-                     std::unordered_set<std::string>* ids)
-            : topic(std::move(topicName)),
-              reader(anyReader),
-              totalValidSamples(totalSamples),
-              seenIds(ids)
-        {
-        }
-    };
-
-    std::vector<StatusSource> statusSources;
+    StatusPoller poller(tablePtr);
     if (options.tableMode) {
-        statusSources.reserve(handlers.size());
         for (auto& handler : handlers) {
             std::visit([&](auto& topicHandler) {
-                statusSources.emplace_back(topicHandler.name,
-                                           topicHandler.reader,
-                                           &topicHandler.totalValidSamples,
-                                           &topicHandler.seenIds);
+                poller.AddSource(topicHandler.name,
+                                 topicHandler.reader,
+                                 &topicHandler.totalValidSamples,
+                                 &topicHandler.seenIds);
             }, handler);
         }
     }
 
-    auto lastStatusUpdate = std::chrono::steady_clock::now() - std::chrono::seconds(10);
-
         while (!stopToken.StopRequested()) {
-        if (tablePtr != nullptr) {
-            const auto now = std::chrono::steady_clock::now();
-            if (now - lastStatusUpdate >= std::chrono::milliseconds(500)) {
-                const double dtSeconds = std::chrono::duration<double>(now - lastStatusUpdate).count();
-                for (auto& src : statusSources) {
-                    try {
-                        double rateTotal = 0.0;
-                        if (src.totalValidSamples != nullptr && dtSeconds > 0.0) {
-                            const uint64_t total = *src.totalValidSamples;
-                            if (src.hasLastTotal) {
-                                const uint64_t delta = total - src.lastTotalValidSamples;
-                                rateTotal = static_cast<double>(delta) / dtSeconds;
-                            }
-                            src.lastTotalValidSamples = total;
-                            src.hasLastTotal = true;
-                        }
-
-                        size_t uniqueIds = 0;
-                        if (src.seenIds != nullptr) {
-                            uniqueIds = src.seenIds->size();
-                        }
-                        const size_t divisor = (uniqueIds > 0) ? uniqueIds : 1;
-                        const double rateAvgPerId = rateTotal / static_cast<double>(divisor);
-
-                        tablePtr->SetTopicStatus(src.topic, FormatReaderStatus(src.reader, rateAvgPerId, uniqueIds));
-                    } catch (const std::exception& ex) {
-                        tablePtr->SetTopicStatus(src.topic, std::string("status_error=") + ex.what());
-                    } catch (...) {
-                        tablePtr->SetTopicStatus(src.topic, "status_error=unknown");
-                    }
-                }
-                lastStatusUpdate = now;
-            }
-        }
+        poller.Poll();
 
             for (auto& handler : handlers) {
             struct HandlerVisitor {
                 mapper::GamepadState& state;
-                emulator::VigemClient& client;
+                emulator::IVigemClient& client;
                 const RxOutput& output;
                 int yokeId;
 
@@ -655,6 +591,7 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
                 const bool ok = std::visit(HandlerVisitor{state, client, output, options.yokeId}, handler);
                 if (!ok) {
                     SetLastError(std::string("Runtime error: ") + client.LastError());
+                    std::cerr << LastError() << std::endl;
                     return EXIT_FAILURE;
                 }
             }
