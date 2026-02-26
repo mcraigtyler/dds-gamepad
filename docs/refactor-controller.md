@@ -392,19 +392,41 @@ Each phase compiles and passes smoke tests independently.
 
 *Diff size: small-medium. Pure addition.*
 
-### Phase 4 — Implement `UdpProtobufEmulator`
+### Phase 4 — Stub `UdpProtobufEmulator`
 
-12. Add protobuf dependency (see §10).
-13. Define the `.proto` schema for the output message.
-14. Implement `src/emulator/UdpProtobufEmulator.h/.cpp`:
-    - `Connect()` — resolve host, open UDP socket (`SOCK_DGRAM`, `WSAStartup` on Windows).
-    - `UpdateState(OutputState)` — iterate `state.channels`; for each key call
-      `descriptor->FindFieldByName(key)` and set the field via reflection; serialize
-      and `sendto()`.
-    - `LastError()` — surface last socket or serialization error.
-15. Register in `CMakeLists.txt`; wire into `AppRunner` backend factory.
+Create the class skeleton so `AppRunner`'s backend factory can construct it for
+`type: udp_protobuf` configs without crashing. Protobuf and UDP implementation
+is deferred to Phase 5 — no external library dependencies are added in this phase.
 
-*Diff size: medium. Self-contained new file.*
+12. Create `src/emulator/UdpProtobufEmulator.h`:
+    - `struct UdpProtobufConfig { std::string host; uint16_t port = 0; }`;
+    - `class UdpProtobufEmulator final : public IOutputDevice` with full interface.
+13. Create `src/emulator/UdpProtobufEmulator.cpp` with stub bodies:
+    - `Connect()` — no-op (no socket, no `WSAStartup`).
+    - `UpdateState()` — no-op; return `true`.
+    - `LastError()` — return `""`.
+14. Register sources in `CMakeLists.txt` and wire into `AppRunner` backend factory
+    so `type: udp_protobuf` constructs a `UdpProtobufEmulator` instead of throwing
+    "Unknown output backend".
+
+*Diff size: small. No external dependencies added.*
+
+### Phase 5 — Implement `UdpProtobufEmulator` (deferred)
+
+Full protobuf and UDP implementation. Scope to be refined once the protobuf schema
+and transport requirements are finalised (see §10 and §11).
+
+15. Add protobuf dependency (see §10).
+16. Define the `.proto` schema for the output message (`src/emulator/vehicle_state.proto`).
+17. Implement `UdpProtobufEmulator::Connect()` — resolve host, open UDP socket
+    (`SOCK_DGRAM`, `WSAStartup` on Windows).
+18. Implement `UdpProtobufEmulator::UpdateState()` — iterate `state.channels`; for each
+    key call `descriptor->FindFieldByName(key)` and set the field via reflection; serialize
+    and `sendto()`.
+19. Implement `UdpProtobufEmulator::LastError()` — surface last socket or serialization error.
+20. Update `CMakeLists.txt` to compile the generated protobuf sources.
+
+*Diff size: medium. Requires resolving open questions in §11 (schema, transport, library choice).*
 
 ---
 
@@ -464,8 +486,8 @@ field list in C++.
 | `src/mapper/GamepadState.h` | Retained as ViGEm-internal type, or deleted |
 | `src/emulator/IOutputDevice.h` | **New** — generalised interface (replaces `IVigemClient`) |
 | `src/emulator/VigemClient.h/.cpp` | Implements `IOutputDevice`; `OutputState → XUSB_REPORT` internally |
-| `src/emulator/UdpProtobufEmulator.h/.cpp` | **New** — UDP + protobuf backend |
-| `src/emulator/vehicle_state.proto` | **New** — protobuf message schema |
+| `src/emulator/UdpProtobufEmulator.h/.cpp` | **New** — stub skeleton (Phase 4); full UDP + protobuf implementation (Phase 5) |
+| `src/emulator/vehicle_state.proto` | **New** — protobuf message schema (Phase 5, deferred) |
 | `src/config/ConfigLoader.h/.cpp` | Parse `output:` section; `target` as string; infer/parse `channelType` |
 | `src/app/AppRunner.h/.cpp` | Use `IOutputDevice`; backend factory from config |
 | `src/main.cpp` | Construct `VigemEmulator` or delegate to `AppRunner` factory |
