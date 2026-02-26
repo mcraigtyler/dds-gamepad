@@ -137,19 +137,15 @@ if(WIN32)
     target_compile_definitions(${EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
     target_compile_definitions(${SERVICE_EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
 endif()
-target_include_directories(${EXE_NAME} PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_BINARY_DIR}
-        "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
-        "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
-
-target_include_directories(${SERVICE_EXE_NAME} PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_BINARY_DIR}
-        "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
-        "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
+set(COMMON_INCLUDE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+    "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx"
+)
+target_include_directories(${EXE_NAME} PUBLIC ${COMMON_INCLUDE_DIRS})
+target_include_directories(${SERVICE_EXE_NAME} PUBLIC ${COMMON_INCLUDE_DIRS})
 
 if(WIN32)
     set(VIGEMCLIENT_SOURCE_DIR "" CACHE PATH "Optional local path to ViGEmClient source")

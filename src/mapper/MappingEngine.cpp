@@ -53,7 +53,7 @@ MappingEngine::MappingEngine(std::vector<MappingDefinition> mappings)
     }
 }
 
-bool MappingEngine::Apply(const std::string& field, int message_id, float value, GamepadState& state) const {
+bool MappingEngine::Apply(const std::string& field, int message_id, float value, GamepadState& state) {
     bool updated = false;
     for (const auto& mapping : mappings_) {
         if (mapping.field != field) {

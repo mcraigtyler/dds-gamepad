@@ -50,13 +50,13 @@ class MappingEngine {
 public:
     explicit MappingEngine(std::vector<MappingDefinition> mappings);
 
-    bool Apply(const std::string& field, int message_id, float value, GamepadState& state) const;
+    bool Apply(const std::string& field, int message_id, float value, GamepadState& state);
 
 private:
     std::vector<MappingDefinition> mappings_;
     // Stores the last computed contribution (after scale/invert/deadzone) for
     // each additive mapping, keyed by mapping name. Initialised to 0 so that
     // sources which haven't yet sent a message contribute nothing to the sum.
-    mutable std::unordered_map<std::string, float> additive_state_;
+    std::unordered_map<std::string, float> additive_state_;
 };
 }  // namespace mapper
