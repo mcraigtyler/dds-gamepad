@@ -421,6 +421,56 @@ void SleepWithStop(const StopToken& stopToken, std::chrono::milliseconds duratio
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 }
+
+class TableTxStateListener final : public emulator::ITxStateListener
+{
+public:
+    explicit TableTxStateListener(console::RxTable* tablePtr)
+        : _table(tablePtr)
+    {
+    }
+
+    void OnTxState(const mapper::GamepadState& txState) override
+    {
+        if (_table == nullptr) {
+            return;
+        }
+
+        std::ostringstream out;
+        out << "state"
+            << " LT=" << static_cast<int>(txState.left_trigger)
+            << " RT=" << static_cast<int>(txState.right_trigger)
+            << " LX=" << txState.left_stick_x
+            << " LY=" << txState.left_stick_y
+            << " RX=" << txState.right_stick_x
+            << " RY=" << txState.right_stick_y
+            << " Btn=0x" << std::hex << txState.buttons << std::dec;
+        _table->SetTxStateLine(out.str());
+    }
+
+private:
+    console::RxTable* _table;
+};
+
+struct StatusSource {
+    std::string topic;
+    dds::sub::AnyDataReader reader;
+    uint64_t* totalValidSamples = nullptr;
+    std::unordered_set<std::string>* seenIds = nullptr;
+    uint64_t lastTotalValidSamples = 0;
+    bool hasLastTotal = false;
+
+    StatusSource(std::string topicName,
+                 const dds::sub::AnyDataReader& anyReader,
+                 uint64_t* totalSamples,
+                 std::unordered_set<std::string>* ids)
+        : topic(std::move(topicName)),
+          reader(anyReader),
+          totalValidSamples(totalSamples),
+          seenIds(ids)
+    {
+    }
+};
 } // namespace
 
 int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
@@ -523,60 +573,10 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
         output.logRx = options.logRx && !options.tableMode;
         output.table = tablePtr;
 
-    class TableTxStateListener final : public emulator::ITxStateListener
-    {
-    public:
-        explicit TableTxStateListener(console::RxTable* tablePtr)
-            : _table(tablePtr)
-        {
-        }
-
-        void OnTxState(const mapper::GamepadState& txState) override
-        {
-            if (_table == nullptr) {
-                return;
-            }
-
-            std::ostringstream out;
-            out << "state"
-                << " LT=" << static_cast<int>(txState.left_trigger)
-                << " RT=" << static_cast<int>(txState.right_trigger)
-                << " LX=" << txState.left_stick_x
-                << " LY=" << txState.left_stick_y
-                << " RX=" << txState.right_stick_x
-                << " RY=" << txState.right_stick_y
-                << " Btn=0x" << std::hex << txState.buttons << std::dec;
-            _table->SetTxStateLine(out.str());
-        }
-
-    private:
-        console::RxTable* _table;
-    };
-
     TableTxStateListener txListener(tablePtr);
     if (options.tableMode) {
         client.SetTxStateListener(&txListener);
     }
-
-    struct StatusSource {
-        std::string topic;
-        dds::sub::AnyDataReader reader;
-        uint64_t* totalValidSamples = nullptr;
-        std::unordered_set<std::string>* seenIds = nullptr;
-        uint64_t lastTotalValidSamples = 0;
-        bool hasLastTotal = false;
-
-        StatusSource(std::string topicName,
-                     const dds::sub::AnyDataReader& anyReader,
-                     uint64_t* totalSamples,
-                     std::unordered_set<std::string>* ids)
-            : topic(std::move(topicName)),
-              reader(anyReader),
-              totalValidSamples(totalSamples),
-              seenIds(ids)
-        {
-        }
-    };
 
     std::vector<StatusSource> statusSources;
     if (options.tableMode) {
