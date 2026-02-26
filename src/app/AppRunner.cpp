@@ -249,7 +249,6 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
         }
 
         if (!client.UpdateState(state)) {
-            std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
             return false;
         }
 
@@ -304,7 +303,6 @@ bool ProcessStickSamples(StickHandler& handler,
         }
 
         if (!client.UpdateState(state)) {
-            std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
             return false;
         }
 
@@ -377,7 +375,6 @@ bool ProcessButtonSamples(ButtonHandler& handler,
         }
 
         if (!client.UpdateState(state)) {
-            std::cerr << "Failed to update controller state: " << client.LastError() << std::endl;
             return false;
         }
 
@@ -594,6 +591,7 @@ int AppRunner::Run(const AppRunnerOptions& options,
                 const bool ok = std::visit(HandlerVisitor{state, client, output, options.yokeId}, handler);
                 if (!ok) {
                     SetLastError(std::string("Runtime error: ") + client.LastError());
+                    std::cerr << LastError() << std::endl;
                     return EXIT_FAILURE;
                 }
             }
