@@ -79,6 +79,7 @@ DDS topics → AppRunner (read loop) → MappingEngine → OutputState → IOutp
 | `src/mapper/MappingEngine.cpp` | Applies scale, deadzone, and invert to raw DDS values; writes normalised floats to `OutputState::channels`. |
 | `src/emulator/IOutputDevice.h` | Generic output-device interface (`Connect`, `UpdateState(OutputState)`). |
 | `src/emulator/VigemClient.cpp` | Implements `IOutputDevice`; converts `OutputState` channels to `XUSB_REPORT` for the virtual Xbox 360 controller. |
+| `src/emulator/UdpProtobufEmulator.cpp` | Stub `IOutputDevice` for the `udp_protobuf` backend (no-op; full UDP + protobuf implementation deferred to Phase 5). |
 | `src/common/OutputState.h` | Generic `unordered_map<string, float>` channel map passed between mapper and backend. |
 | `src/service/ServiceMain.cpp` | Windows service lifecycle (OnStart/OnStop); re-uses AppRunner in a worker thread. |
 | `src/console/RxTable.cpp` | Live console table using cursor positioning. |
@@ -103,7 +104,7 @@ role:
 
 # Optional. Selects the output backend. Defaults to vigem_x360 if absent.
 output:
-  type: vigem_x360        # "vigem_x360" (default) or "udp_protobuf" (Phase 4)
+  type: vigem_x360        # "vigem_x360" (default) or "udp_protobuf" (stub — full implementation Phase 5)
   # host: 192.168.1.100   # udp_protobuf only
   # port: 5000            # udp_protobuf only
 
