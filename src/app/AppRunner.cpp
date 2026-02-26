@@ -215,7 +215,7 @@ struct ButtonHandler {
 
 bool ProcessAnalogSamples(AnalogHandler& handler,
                           mapper::GamepadState& state,
-                          emulator::VigemClient& client,
+                          emulator::IVigemClient& client,
                           const RxOutput& output,
                           int yokeId)
 {
@@ -265,7 +265,7 @@ bool ProcessAnalogSamples(AnalogHandler& handler,
 
 bool ProcessStickSamples(StickHandler& handler,
                          mapper::GamepadState& state,
-                         emulator::VigemClient& client,
+                         emulator::IVigemClient& client,
                          const RxOutput& output,
                          int yokeId)
 {
@@ -322,7 +322,7 @@ bool ProcessStickSamples(StickHandler& handler,
 
 bool ProcessButtonSamples(ButtonHandler& handler,
                           mapper::GamepadState& state,
-                          emulator::VigemClient& client,
+                          emulator::IVigemClient& client,
                           const RxOutput& output,
                           int yokeId)
 {
@@ -434,6 +434,26 @@ private:
 
 int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
 {
+    try {
+        emulator::VigemClient client;
+        client.Connect();           // throws std::runtime_error on failure
+        client.AddX360Controller(); // throws std::runtime_error on failure
+        return Run(options, client, stopToken);
+    } catch (const std::exception& ex) {
+        SetLastError(std::string("ViGEm setup failed: ") + ex.what());
+        std::cerr << LastError() << std::endl;
+        return EXIT_FAILURE;
+    } catch (...) {
+        SetLastError("ViGEm setup failed: unknown exception.");
+        std::cerr << LastError() << std::endl;
+        return EXIT_FAILURE;
+    }
+}
+
+int AppRunner::Run(const AppRunnerOptions& options,
+                   emulator::IVigemClient& client,
+                   const StopToken& stopToken)
+{
     _lastError.clear();
 
     if (options.configFile.empty()) {
@@ -451,10 +471,6 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
             std::cerr << LastError() << std::endl;
             return EXIT_FAILURE;
         }
-
-        emulator::VigemClient client;
-        client.Connect();           // throws std::runtime_error on failure
-        client.AddX360Controller(); // throws std::runtime_error on failure
 
         // Console mode keeps previous behavior: log tx state unless table mode.
         // Service mode should set logTxState=false to avoid per-sample output.
@@ -555,7 +571,7 @@ int AppRunner::Run(const AppRunnerOptions& options, const StopToken& stopToken)
             for (auto& handler : handlers) {
             struct HandlerVisitor {
                 mapper::GamepadState& state;
-                emulator::VigemClient& client;
+                emulator::IVigemClient& client;
                 const RxOutput& output;
                 int yokeId;
 
