@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -21,8 +22,18 @@ struct AppConfig {
     std::vector<common::MappingDefinition> mappings;
 };
 
+// Parsed from the top-level `output:` YAML section.
+// Selects the output backend and provides its connection parameters.
+// If `output:` is absent from the YAML, type defaults to "vigem_x360".
+struct OutputConfig {
+    std::string type = "vigem_x360";  // "vigem_x360" or "udp_protobuf"
+    std::string host;                 // UDP target host (udp_protobuf only)
+    uint16_t port = 0;                // UDP target port (udp_protobuf only)
+};
+
 struct RoleConfig {
     std::string name;
+    OutputConfig output;
     std::vector<AppConfig> app_configs;
 };
 

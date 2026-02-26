@@ -46,6 +46,16 @@ common::ChannelType InferChannelType(const std::string& target) {
     return common::ChannelType::Axis;
 }
 
+// Parses an explicit `type:` value from the per-mapping output/gamepad node.
+// Used for custom channel names (e.g. UDP protobuf fields) where the type
+// cannot be inferred from the target string prefix.
+common::ChannelType ParseChannelType(const std::string& type) {
+    if (type == "axis")    return common::ChannelType::Axis;
+    if (type == "trigger") return common::ChannelType::Trigger;
+    if (type == "button")  return common::ChannelType::Button;
+    throw std::runtime_error("Unknown channel type '" + type + "'. Expected: axis, trigger, button.");
+}
+
 std::string RequireString(const YAML::Node& node, const std::string& key) {
     const auto field = node[key];
     if (!field || !field.IsScalar()) {
@@ -60,6 +70,15 @@ int RequireInt(const YAML::Node& node, const std::string& key) {
         throw std::runtime_error("Missing or invalid '" + key + "' field in config.");
     }
     return field.as<int>();
+}
+
+std::string OptionalString(const YAML::Node& node, const std::string& key,
+                           const std::string& default_value) {
+    const auto field = node[key];
+    if (!field) {
+        return default_value;
+    }
+    return field.as<std::string>();
 }
 
 float OptionalFloat(const YAML::Node& node, const std::string& key, float default_value) {
@@ -135,6 +154,17 @@ RoleConfig ConfigLoader::Load(const std::string& path) {
     RoleConfig roleConfig;
     roleConfig.name = RequireString(roleNode, "name");
 
+    // Parse optional top-level output: section.
+    // Absent output: defaults to vigem_x360 for backward compatibility.
+    const YAML::Node outputNode = root["output"];
+    if (outputNode && outputNode.IsMap()) {
+        roleConfig.output.type = OptionalString(outputNode, "type", "vigem_x360");
+        roleConfig.output.host = OptionalString(outputNode, "host", "");
+        if (outputNode["port"] && outputNode["port"].IsScalar()) {
+            roleConfig.output.port = static_cast<uint16_t>(outputNode["port"].as<int>());
+        }
+    }
+
     std::unordered_map<std::string, size_t> topicIndex;
 
     for (const auto& entry : mappingsNode) {
@@ -147,9 +177,13 @@ RoleConfig ConfigLoader::Load(const std::string& path) {
             throw std::runtime_error("Each mapping entry must contain a 'dds' map.");
         }
 
-        const YAML::Node gamepadNode = entry["gamepad"];
-        if (!gamepadNode || !gamepadNode.IsMap()) {
-            throw std::runtime_error("Each mapping entry must contain a 'gamepad' map.");
+        // Accept `output:` (new schema) or `gamepad:` (legacy schema) per mapping.
+        YAML::Node mappingOutputNode = entry["output"];
+        if (!mappingOutputNode || !mappingOutputNode.IsMap()) {
+            mappingOutputNode = entry["gamepad"];
+        }
+        if (!mappingOutputNode || !mappingOutputNode.IsMap()) {
+            throw std::runtime_error("Each mapping entry must contain an 'output' (or 'gamepad') map.");
         }
 
         DdsConfig dds;
@@ -164,14 +198,23 @@ RoleConfig ConfigLoader::Load(const std::string& path) {
         const std::string rawField = RequireString(ddsNode, "field");
         mapping.field = NormalizeFieldName(rawField);
 
-        const std::string targetStr = RequireString(gamepadNode, "to");
+        const std::string targetStr = RequireString(mappingOutputNode, "to");
         mapping.target = targetStr;
-        mapping.channelType = InferChannelType(targetStr);
 
-        mapping.scale = OptionalFloat(gamepadNode, "scale", 1.0f);
-        mapping.deadzone = OptionalFloat(gamepadNode, "deadzone", 0.0f);
-        mapping.invert = OptionalBool(gamepadNode, "invert", false);
-        mapping.additive = OptionalBool(gamepadNode, "additive", false);
+        // Explicit `type:` under the output/gamepad node overrides prefix inference.
+        // Required for custom channel names (e.g. UDP protobuf fields like "steering")
+        // where the type cannot be inferred from the target string prefix.
+        const std::string channelTypeStr = OptionalString(mappingOutputNode, "type", "");
+        if (!channelTypeStr.empty()) {
+            mapping.channelType = ParseChannelType(channelTypeStr);
+        } else {
+            mapping.channelType = InferChannelType(targetStr);
+        }
+
+        mapping.scale = OptionalFloat(mappingOutputNode, "scale", 1.0f);
+        mapping.deadzone = OptionalFloat(mappingOutputNode, "deadzone", 0.0f);
+        mapping.invert = OptionalBool(mappingOutputNode, "invert", false);
+        mapping.additive = OptionalBool(mappingOutputNode, "additive", false);
 
         if (ddsNode["input_min"] && ddsNode["input_max"]) {
             mapping.input_min = ddsNode["input_min"].as<float>();
