@@ -1,8 +1,10 @@
 #include "console/RxTable.h"
 
-#include <algorithm>
-#include <iomanip>
-#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include <windows.h>
 
 namespace console
 {
@@ -15,30 +17,175 @@ std::string PadRight(const std::string& text, size_t width) {
     out.append(width - text.size(), ' ');
     return out;
 }
+} // namespace
+
+struct RxTable::Impl
+{
+    struct RowData
+    {
+        std::string topic;
+        std::string id;
+        std::string value;
+        SHORT row = 0;
+    };
+
+    HANDLE out = INVALID_HANDLE_VALUE;
+    bool active = false;
+    SHORT width = 0;
+    SHORT nextRow = 2;
+    CONSOLE_CURSOR_INFO originalCursorInfo{};
+
+    SHORT statusRowCount = 0;
+    bool hasTxLine = false;
+    SHORT txRow = 0;
+    std::string txText;
+    SHORT tableHeaderRow = 0;
+    SHORT tableUnderlineRow = 1;
+
+    size_t topicWidth = std::string("topic").size();
+    size_t idWidth = std::string("id").size();
+
+    std::unordered_map<std::string, SHORT> topicStatusRows;
+    std::unordered_map<std::string, std::string> topicStatusText;
+    std::vector<std::string> topicStatusOrder;
+
+    std::unordered_map<std::string, RowData> rowsByKey;
+    std::vector<std::string> rowOrder;
+
+    Impl() noexcept {
+        originalCursorInfo.dwSize = 25;
+        originalCursorInfo.bVisible = TRUE;
+    }
+
+    void ClearScreen(const CONSOLE_SCREEN_BUFFER_INFO& info) noexcept;
+    void EnsureBufferHeight(SHORT minHeight) noexcept;
+    SHORT AllocateRow(const std::string& key) noexcept;
+    void WriteLineAtRow(SHORT row, const std::string& line) noexcept;
+    void RedrawAll() noexcept;
+    void WriteTopicStatusLine(const std::string& topic) noexcept;
+};
+
+void RxTable::Impl::ClearScreen(const CONSOLE_SCREEN_BUFFER_INFO& info) noexcept
+{
+    const DWORD cellCount = static_cast<DWORD>(info.dwSize.X) * static_cast<DWORD>(info.dwSize.Y);
+    DWORD written = 0;
+    const COORD home{0, 0};
+
+    FillConsoleOutputCharacterA(out, ' ', cellCount, home, &written);
+    FillConsoleOutputAttribute(out, info.wAttributes, cellCount, home, &written);
+    SetConsoleCursorPosition(out, home);
 }
 
-RxTable::RxTable() noexcept
-    : _out(INVALID_HANDLE_VALUE),
-      _active(false),
-      _width(0),
-            _nextRow(2),
-      _topicWidth(std::string("topic").size()),
-            _idWidth(std::string("id").size()),
-            _statusRowCount(0),
-            _hasTxLine(false),
-            _txRow(0),
-            _txText(),
-            _tableHeaderRow(0),
-            _tableUnderlineRow(1)
+void RxTable::Impl::EnsureBufferHeight(SHORT minHeight) noexcept
 {
-    _originalCursorInfo.dwSize = 25;
-    _originalCursorInfo.bVisible = TRUE;
+    CONSOLE_SCREEN_BUFFER_INFO info{};
+    if (!GetConsoleScreenBufferInfo(out, &info)) {
+        return;
+    }
+
+    if (info.dwSize.Y >= minHeight) {
+        return;
+    }
+
+    COORD newSize = info.dwSize;
+    newSize.Y = static_cast<SHORT>(minHeight + 50);
+    if (SetConsoleScreenBufferSize(out, newSize)) {
+        width = newSize.X;
+    }
+}
+
+SHORT RxTable::Impl::AllocateRow(const std::string& key) noexcept
+{
+    const SHORT row = nextRow;
+    nextRow = static_cast<SHORT>(nextRow + 1);
+
+    EnsureBufferHeight(static_cast<SHORT>(nextRow + 2));
+    WriteLineAtRow(row, "");
+    return row;
+}
+
+void RxTable::Impl::WriteLineAtRow(SHORT row, const std::string& line) noexcept
+{
+    EnsureBufferHeight(static_cast<SHORT>(row + 2));
+
+    std::string padded = line;
+    if (width > 0) {
+        const size_t w = static_cast<size_t>(width);
+        if (padded.size() > w) {
+            padded.resize(w);
+        } else if (padded.size() < w) {
+            padded.append(w - padded.size(), ' ');
+        }
+    }
+
+    const COORD pos{0, row};
+    SetConsoleCursorPosition(out, pos);
+
+    DWORD written = 0;
+    WriteConsoleA(out, padded.data(), static_cast<DWORD>(padded.size()), &written, nullptr);
+}
+
+void RxTable::Impl::RedrawAll() noexcept
+{
+    if (hasTxLine) {
+        const std::string line = PadRight("tx", topicWidth) + " | " + txText;
+        WriteLineAtRow(txRow, line);
+    }
+
+    const std::string header =
+        PadRight("topic", topicWidth) + " | " +
+        PadRight("id", idWidth) + " | value";
+    const std::string underline =
+        std::string(topicWidth, '-') + " | " +
+        std::string(idWidth, '-') + " | " +
+        std::string(5, '-');
+
+    WriteLineAtRow(tableHeaderRow, header);
+    WriteLineAtRow(tableUnderlineRow, underline);
+
+    for (const auto& key : rowOrder) {
+        const auto it = rowsByKey.find(key);
+        if (it == rowsByKey.end()) {
+            continue;
+        }
+        const std::string line =
+            PadRight(it->second.topic, topicWidth) + " | " +
+            PadRight(it->second.id, idWidth) + " | " +
+            it->second.value;
+        WriteLineAtRow(it->second.row, line);
+    }
+}
+
+void RxTable::Impl::WriteTopicStatusLine(const std::string& topic) noexcept
+{
+    const auto rowIt = topicStatusRows.find(topic);
+    if (rowIt == topicStatusRows.end()) {
+        return;
+    }
+
+    const auto textIt = topicStatusText.find(topic);
+    const std::string& status = (textIt != topicStatusText.end()) ? textIt->second : std::string();
+
+    std::string line = PadRight(topic, topicWidth) + " | " + status;
+    WriteLineAtRow(rowIt->second, line);
+}
+
+// ---------------------------------------------------------------------------
+// RxTable public interface — delegates to Impl
+// ---------------------------------------------------------------------------
+
+RxTable::RxTable() noexcept
+    : impl_(std::make_unique<Impl>())
+{
 }
 
 RxTable::~RxTable() noexcept
 {
     End();
 }
+
+RxTable::RxTable(RxTable&&) noexcept = default;
+RxTable& RxTable::operator=(RxTable&&) noexcept = default;
 
 bool RxTable::Begin() noexcept
 {
@@ -53,87 +200,87 @@ bool RxTable::Begin(const std::vector<std::string>& topics) noexcept
 
 bool RxTable::Begin(const std::vector<std::string>& topics, bool includeTxLine) noexcept
 {
-    _out = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (_out == INVALID_HANDLE_VALUE || _out == nullptr) {
+    impl_->out = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (impl_->out == INVALID_HANDLE_VALUE || impl_->out == nullptr) {
         return false;
     }
 
     CONSOLE_SCREEN_BUFFER_INFO info{};
-    if (!GetConsoleScreenBufferInfo(_out, &info)) {
+    if (!GetConsoleScreenBufferInfo(impl_->out, &info)) {
         return false;
     }
-    _width = info.dwSize.X;
+    impl_->width = info.dwSize.X;
 
-    if (!GetConsoleCursorInfo(_out, &_originalCursorInfo)) {
-        _originalCursorInfo.dwSize = 25;
-        _originalCursorInfo.bVisible = TRUE;
+    if (!GetConsoleCursorInfo(impl_->out, &impl_->originalCursorInfo)) {
+        impl_->originalCursorInfo.dwSize = 25;
+        impl_->originalCursorInfo.bVisible = TRUE;
     }
 
-    CONSOLE_CURSOR_INFO hidden = _originalCursorInfo;
+    CONSOLE_CURSOR_INFO hidden = impl_->originalCursorInfo;
     hidden.bVisible = FALSE;
-    SetConsoleCursorInfo(_out, &hidden);
+    SetConsoleCursorInfo(impl_->out, &hidden);
 
-    ClearScreen(info);
+    impl_->ClearScreen(info);
 
-    _topicWidth = std::string("topic").size();
-    _idWidth = std::string("id").size();
+    impl_->topicWidth = std::string("topic").size();
+    impl_->idWidth = std::string("id").size();
     for (const auto& t : topics) {
-        if (t.size() > _topicWidth) {
-            _topicWidth = t.size();
+        if (t.size() > impl_->topicWidth) {
+            impl_->topicWidth = t.size();
         }
     }
 
-    _topicStatusRows.clear();
-    _topicStatusText.clear();
-    _topicStatusOrder.clear();
-    _topicStatusOrder.reserve(topics.size());
-    _statusRowCount = static_cast<SHORT>(topics.size());
-    _hasTxLine = includeTxLine;
-    _txText.clear();
-    if (_hasTxLine) {
-        _txRow = _statusRowCount;
-        _tableHeaderRow = static_cast<SHORT>(_statusRowCount + 1);
-        _tableUnderlineRow = static_cast<SHORT>(_statusRowCount + 2);
+    impl_->topicStatusRows.clear();
+    impl_->topicStatusText.clear();
+    impl_->topicStatusOrder.clear();
+    impl_->topicStatusOrder.reserve(topics.size());
+    impl_->statusRowCount = static_cast<SHORT>(topics.size());
+    impl_->hasTxLine = includeTxLine;
+    impl_->txText.clear();
+    if (impl_->hasTxLine) {
+        impl_->txRow = impl_->statusRowCount;
+        impl_->tableHeaderRow = static_cast<SHORT>(impl_->statusRowCount + 1);
+        impl_->tableUnderlineRow = static_cast<SHORT>(impl_->statusRowCount + 2);
     } else {
-        _txRow = 0;
-        _tableHeaderRow = _statusRowCount;
-        _tableUnderlineRow = static_cast<SHORT>(_statusRowCount + 1);
+        impl_->txRow = 0;
+        impl_->tableHeaderRow = impl_->statusRowCount;
+        impl_->tableUnderlineRow = static_cast<SHORT>(impl_->statusRowCount + 1);
     }
 
-    for (SHORT i = 0; i < _statusRowCount; ++i) {
+    for (SHORT i = 0; i < impl_->statusRowCount; ++i) {
         const auto& topic = topics[static_cast<size_t>(i)];
-        _topicStatusRows.emplace(topic, i);
-        _topicStatusText.emplace(topic, std::string());
-        _topicStatusOrder.push_back(topic);
+        impl_->topicStatusRows.emplace(topic, i);
+        impl_->topicStatusText.emplace(topic, std::string());
+        impl_->topicStatusOrder.push_back(topic);
     }
 
-    _rowsByKey.clear();
-    _rowOrder.clear();
-    _nextRow = static_cast<SHORT>(_tableUnderlineRow + 1);
+    impl_->rowsByKey.clear();
+    impl_->rowOrder.clear();
+    impl_->nextRow = static_cast<SHORT>(impl_->tableUnderlineRow + 1);
 
-    RedrawAll();
+    impl_->RedrawAll();
 
-    _active = true;
+    impl_->active = true;
     return true;
 }
 
 void RxTable::End() noexcept
 {
-    if (!_active) {
+    if (!impl_ || !impl_->active) {
         return;
     }
 
-    SetConsoleCursorInfo(_out, &_originalCursorInfo);
+    SetConsoleCursorInfo(impl_->out, &impl_->originalCursorInfo);
 
-    const COORD pos{0, static_cast<SHORT>(_nextRow + 1)};
-    SetConsoleCursorPosition(_out, pos);
+    const COORD pos{0, static_cast<SHORT>(impl_->nextRow + 1)};
+    SetConsoleCursorPosition(impl_->out, pos);
 
-    _active = false;
+    impl_->active = false;
 }
 
 void RxTable::Update(const std::string& topic, const std::string& id, const std::string& value) noexcept
 {
-    if (!_active) {
+    if (!impl_ || !impl_->active) {
         return;
     }
 
@@ -144,24 +291,24 @@ void RxTable::Update(const std::string& topic, const std::string& id, const std:
     key.append(id);
 
     bool widthChanged = false;
-    if (topic.size() > _topicWidth) {
-        _topicWidth = topic.size();
+    if (topic.size() > impl_->topicWidth) {
+        impl_->topicWidth = topic.size();
         widthChanged = true;
     }
-    if (id.size() > _idWidth) {
-        _idWidth = id.size();
+    if (id.size() > impl_->idWidth) {
+        impl_->idWidth = id.size();
         widthChanged = true;
     }
 
-    auto it = _rowsByKey.find(key);
-    if (it == _rowsByKey.end()) {
-        RowData data;
+    auto it = impl_->rowsByKey.find(key);
+    if (it == impl_->rowsByKey.end()) {
+        Impl::RowData data;
         data.topic = topic;
         data.id = id;
         data.value = value;
-        data.row = AllocateRow(key);
-        _rowOrder.push_back(key);
-        it = _rowsByKey.emplace(key, std::move(data)).first;
+        data.row = impl_->AllocateRow(key);
+        impl_->rowOrder.push_back(key);
+        it = impl_->rowsByKey.emplace(key, std::move(data)).first;
         // New rows should also pick up the latest column widths.
         widthChanged = true;
     } else {
@@ -171,157 +318,53 @@ void RxTable::Update(const std::string& topic, const std::string& id, const std:
     }
 
     if (widthChanged) {
-        RedrawAll();
+        impl_->RedrawAll();
         return;
     }
 
     const std::string line =
-        PadRight(it->second.topic, _topicWidth) + " | " +
-        PadRight(it->second.id, _idWidth) + " | " +
+        PadRight(it->second.topic, impl_->topicWidth) + " | " +
+        PadRight(it->second.id, impl_->idWidth) + " | " +
         it->second.value;
-    WriteLineAtRow(it->second.row, line);
+    impl_->WriteLineAtRow(it->second.row, line);
 }
 
 void RxTable::SetTopicStatus(const std::string& topic, const std::string& status) noexcept
 {
-    if (!_active) {
+    if (!impl_ || !impl_->active) {
         return;
     }
 
-    auto rowIt = _topicStatusRows.find(topic);
-    if (rowIt == _topicStatusRows.end()) {
+    auto rowIt = impl_->topicStatusRows.find(topic);
+    if (rowIt == impl_->topicStatusRows.end()) {
         return;
     }
 
     bool widthChanged = false;
-    if (topic.size() > _topicWidth) {
-        _topicWidth = topic.size();
+    if (topic.size() > impl_->topicWidth) {
+        impl_->topicWidth = topic.size();
         widthChanged = true;
     }
 
-    _topicStatusText[topic] = status;
+    impl_->topicStatusText[topic] = status;
 
     if (widthChanged) {
-        RedrawAll();
+        impl_->RedrawAll();
         return;
     }
 
-    WriteTopicStatusLine(topic);
+    impl_->WriteTopicStatusLine(topic);
 }
 
 void RxTable::SetTxStateLine(const std::string& text) noexcept
 {
-    if (!_active || !_hasTxLine) {
+    if (!impl_ || !impl_->active || !impl_->hasTxLine) {
         return;
     }
 
-    _txText = text;
-    const std::string line = PadRight("tx", _topicWidth) + " | " + _txText;
-    WriteLineAtRow(_txRow, line);
+    impl_->txText = text;
+    const std::string line = PadRight("tx", impl_->topicWidth) + " | " + impl_->txText;
+    impl_->WriteLineAtRow(impl_->txRow, line);
 }
 
-void RxTable::ClearScreen(const CONSOLE_SCREEN_BUFFER_INFO& info) noexcept
-{
-    const DWORD cellCount = static_cast<DWORD>(info.dwSize.X) * static_cast<DWORD>(info.dwSize.Y);
-    DWORD written = 0;
-    const COORD home{0, 0};
-
-    FillConsoleOutputCharacterA(_out, ' ', cellCount, home, &written);
-    FillConsoleOutputAttribute(_out, info.wAttributes, cellCount, home, &written);
-    SetConsoleCursorPosition(_out, home);
-}
-
-void RxTable::EnsureBufferHeight(SHORT minHeight) noexcept
-{
-    CONSOLE_SCREEN_BUFFER_INFO info{};
-    if (!GetConsoleScreenBufferInfo(_out, &info)) {
-        return;
-    }
-
-    if (info.dwSize.Y >= minHeight) {
-        return;
-    }
-
-    COORD newSize = info.dwSize;
-    newSize.Y = static_cast<SHORT>(minHeight + 50);
-    if (SetConsoleScreenBufferSize(_out, newSize)) {
-        _width = newSize.X;
-    }
-}
-
-SHORT RxTable::AllocateRow(const std::string& key) noexcept
-{
-    const SHORT row = _nextRow;
-    _nextRow = static_cast<SHORT>(_nextRow + 1);
-
-    EnsureBufferHeight(static_cast<SHORT>(_nextRow + 2));
-    WriteLineAtRow(row, "");
-    return row;
-}
-
-void RxTable::WriteLineAtRow(SHORT row, const std::string& line) noexcept
-{
-    EnsureBufferHeight(static_cast<SHORT>(row + 2));
-
-    std::string padded = line;
-    if (_width > 0) {
-        const size_t width = static_cast<size_t>(_width);
-        if (padded.size() > width) {
-            padded.resize(width);
-        } else if (padded.size() < width) {
-            padded.append(width - padded.size(), ' ');
-        }
-    }
-
-    const COORD pos{0, row};
-    SetConsoleCursorPosition(_out, pos);
-
-    DWORD written = 0;
-    WriteConsoleA(_out, padded.data(), static_cast<DWORD>(padded.size()), &written, nullptr);
-}
-
-void RxTable::RedrawAll() noexcept
-{
-    if (_hasTxLine) {
-        const std::string line = PadRight("tx", _topicWidth) + " | " + _txText;
-        WriteLineAtRow(_txRow, line);
-    }
-
-    const std::string header =
-        PadRight("topic", _topicWidth) + " | " +
-        PadRight("id", _idWidth) + " | value";
-    const std::string underline =
-        std::string(_topicWidth, '-') + " | " +
-        std::string(_idWidth, '-') + " | " +
-        std::string(5, '-');
-
-    WriteLineAtRow(_tableHeaderRow, header);
-    WriteLineAtRow(_tableUnderlineRow, underline);
-
-    for (const auto& key : _rowOrder) {
-        const auto it = _rowsByKey.find(key);
-        if (it == _rowsByKey.end()) {
-            continue;
-        }
-        const std::string line =
-            PadRight(it->second.topic, _topicWidth) + " | " +
-            PadRight(it->second.id, _idWidth) + " | " +
-            it->second.value;
-        WriteLineAtRow(it->second.row, line);
-    }
-}
-
-void RxTable::WriteTopicStatusLine(const std::string& topic) noexcept
-{
-    const auto rowIt = _topicStatusRows.find(topic);
-    if (rowIt == _topicStatusRows.end()) {
-        return;
-    }
-
-    const auto textIt = _topicStatusText.find(topic);
-    const std::string& status = (textIt != _topicStatusText.end()) ? textIt->second : std::string();
-
-    std::string line = PadRight(topic, _topicWidth) + " | " + status;
-    WriteLineAtRow(rowIt->second, line);
-}
 } // namespace console
