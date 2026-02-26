@@ -152,35 +152,16 @@ struct RxOutput
     console::RxTable* table = nullptr;
 };
 
-struct AnalogHandler {
+template <typename MsgT>
+struct TopicHandler {
     std::string name;
-    dds::topic::Topic<Gamepad::Gamepad_Analog> topic;
-    dds::sub::DataReader<Gamepad::Gamepad_Analog> reader;
+    dds::topic::Topic<MsgT> topic;
+    dds::sub::DataReader<MsgT> reader;
     mapper::MappingEngine mappingEngine;
     uint64_t totalValidSamples = 0;
     std::unordered_set<std::string> seenIds;
 
-    AnalogHandler(dds::domain::DomainParticipant& participant,
-                  dds::sub::Subscriber& subscriber,
-                  std::string topicName,
-                  mapper::MappingEngine engine)
-        : name(std::move(topicName)),
-          topic(participant, name),
-          reader(subscriber, topic, MakeReaderQos(subscriber)),
-          mappingEngine(std::move(engine))
-    {
-    }
-};
-
-struct StickHandler {
-    std::string name;
-    dds::topic::Topic<Gamepad::Stick_TwoAxis> topic;
-    dds::sub::DataReader<Gamepad::Stick_TwoAxis> reader;
-    mapper::MappingEngine mappingEngine;
-    uint64_t totalValidSamples = 0;
-    std::unordered_set<std::string> seenIds;
-
-    StickHandler(dds::domain::DomainParticipant& participant,
+    TopicHandler(dds::domain::DomainParticipant& participant,
                  dds::sub::Subscriber& subscriber,
                  std::string topicName,
                  mapper::MappingEngine engine)
@@ -192,185 +173,164 @@ struct StickHandler {
     }
 };
 
+// MessageTraits<MsgT> — per-type extraction, formatting, and Apply logic.
+// FormatTable() returns nullopt to skip the sample entirely (pre-filter).
+template <typename MsgT>
+struct MessageTraits;
 
-struct ButtonHandler {
-    std::string name;
-    dds::topic::Topic<Gamepad::Button> topic;
-    dds::sub::DataReader<Gamepad::Button> reader;
-    mapper::MappingEngine mappingEngine;
-    uint64_t totalValidSamples = 0;
-    std::unordered_set<std::string> seenIds;
-
-    ButtonHandler(dds::domain::DomainParticipant& participant,
-                  dds::sub::Subscriber& subscriber,
-                  std::string topicName,
-                  mapper::MappingEngine engine)
-        : name(std::move(topicName)),
-          topic(participant, name),
-          reader(subscriber, topic, MakeReaderQos(subscriber)),
-          mappingEngine(std::move(engine))
+template <>
+struct MessageTraits<Gamepad::Gamepad_Analog> {
+    static std::optional<std::string> FormatTable(const Gamepad::Gamepad_Analog& data)
     {
+        std::ostringstream out;
+        out << std::fixed << std::setprecision(3) << static_cast<float>(data.value());
+        return out.str();
+    }
+
+    static void LogRxRaw(const std::string& name, const std::string& busId,
+                         const Gamepad::Gamepad_Analog& data)
+    {
+        std::cout << "rx_raw topic=" << name
+                  << " id=" << busId
+                  << " value=" << static_cast<float>(data.value()) << std::endl;
+    }
+
+    static bool Apply(const Gamepad::Gamepad_Analog& data, int messageId,
+                      mapper::MappingEngine& engine, mapper::GamepadState& state)
+    {
+        return engine.Apply("value", messageId, static_cast<float>(data.value()), state);
+    }
+
+    static void LogRx(const std::string& name, const std::string& busId,
+                      const Gamepad::Gamepad_Analog& data)
+    {
+        std::cout << "rx topic=" << name
+                  << " id=" << busId
+                  << " value=" << static_cast<float>(data.value()) << std::endl;
     }
 };
 
-bool ProcessAnalogSamples(AnalogHandler& handler,
-                          mapper::GamepadState& state,
-                          emulator::IVigemClient& client,
-                          const RxOutput& output,
-                          int yokeId)
-{
-    auto samples = handler.reader.take();
-    for (const auto& s : samples) {
-        if (!s.info().valid()) {
-            continue;
-        }
-        ++handler.totalValidSamples;
-        const auto& data = s.data();
-        if (!MatchesYokeId(data, yokeId)) {
-            continue;
-        }
-        const std::string busId = FormatBusId(ResolveBusIdFromData(data));
-        handler.seenIds.insert(busId);
-        const int messageId = ResolveRoleFromData(data);
-        const float rawValue = static_cast<float>(data.value());
-
-        if (output.table != nullptr) {
-            std::ostringstream value;
-            value << std::fixed << std::setprecision(3) << rawValue;
-            output.table->Update(handler.name, busId, value.str());
-        } else if (output.logRxRaw) {
-            std::cout << "rx_raw topic=" << handler.name
-                      << " id=" << busId
-                      << " value=" << rawValue << std::endl;
-        }
-
-        if (!handler.mappingEngine.Apply("value", messageId, rawValue, state)) {
-            continue;
-        }
-
-        if (!client.UpdateState(state)) {
-            return false;
-        }
-
-        if (output.table == nullptr && output.logRx) {
-            std::cout << "rx topic=" << handler.name
-                      << " id=" << busId
-                      << " value=" << rawValue
-                      << std::endl;
-        }
+template <>
+struct MessageTraits<Gamepad::Stick_TwoAxis> {
+    static std::optional<std::string> FormatTable(const Gamepad::Stick_TwoAxis& data)
+    {
+        std::ostringstream out;
+        out << "x=" << std::fixed << std::setprecision(3) << static_cast<float>(data.x())
+            << " y=" << std::fixed << std::setprecision(3) << static_cast<float>(data.y());
+        return out.str();
     }
-    return true;
-}
 
-bool ProcessStickSamples(StickHandler& handler,
-                         mapper::GamepadState& state,
-                         emulator::IVigemClient& client,
-                         const RxOutput& output,
-                         int yokeId)
-{
-    auto samples = handler.reader.take();
-    for (const auto& s : samples) {
-        if (!s.info().valid()) {
-            continue;
-        }
-        ++handler.totalValidSamples;
-        const auto& data = s.data();
-        if (!MatchesYokeId(data, yokeId)) {
-            continue;
-        }
-        const std::string busId = FormatBusId(ResolveBusIdFromData(data));
-        handler.seenIds.insert(busId);
-        const int messageId = ResolveRoleFromData(data);
-        const float rawX = static_cast<float>(data.x());
-        const float rawY = static_cast<float>(data.y());
-
-        if (output.table != nullptr) {
-            std::ostringstream value;
-            value << "x=" << std::fixed << std::setprecision(3) << rawX
-                  << " y=" << std::fixed << std::setprecision(3) << rawY;
-            output.table->Update(handler.name, busId, value.str());
-        } else if (output.logRxRaw) {
-            std::cout << "rx_raw topic=" << handler.name
-                      << " id=" << busId
-                      << " x=" << rawX
-                      << " y=" << rawY << std::endl;
-        }
-
-        bool updated = handler.mappingEngine.Apply("x", messageId, rawX, state);
-        updated = handler.mappingEngine.Apply("y", messageId, rawY, state) || updated;
-        if (!updated) {
-            continue;
-        }
-
-        if (!client.UpdateState(state)) {
-            return false;
-        }
-
-        if (output.table == nullptr && output.logRx) {
-            std::cout << "rx topic=" << handler.name
-                      << " id=" << busId
-                      << " x=" << rawX
-                      << " y=" << rawY
-                      << std::endl;
-        }
+    static void LogRxRaw(const std::string& name, const std::string& busId,
+                         const Gamepad::Stick_TwoAxis& data)
+    {
+        std::cout << "rx_raw topic=" << name
+                  << " id=" << busId
+                  << " x=" << static_cast<float>(data.x())
+                  << " y=" << static_cast<float>(data.y()) << std::endl;
     }
-    return true;
-}
 
+    static bool Apply(const Gamepad::Stick_TwoAxis& data, int messageId,
+                      mapper::MappingEngine& engine, mapper::GamepadState& state)
+    {
+        bool updated = engine.Apply("x", messageId, static_cast<float>(data.x()), state);
+        updated = engine.Apply("y", messageId, static_cast<float>(data.y()), state) || updated;
+        return updated;
+    }
 
-bool ProcessButtonSamples(ButtonHandler& handler,
-                          mapper::GamepadState& state,
-                          emulator::IVigemClient& client,
-                          const RxOutput& output,
-                          int yokeId)
-{
-    auto samples = handler.reader.take();
-    for (const auto& s : samples) {
-        if (!s.info().valid()) {
-            continue;
-        }
+    static void LogRx(const std::string& name, const std::string& busId,
+                      const Gamepad::Stick_TwoAxis& data)
+    {
+        std::cout << "rx topic=" << name
+                  << " id=" << busId
+                  << " x=" << static_cast<float>(data.x())
+                  << " y=" << static_cast<float>(data.y()) << std::endl;
+    }
+};
 
-        ++handler.totalValidSamples;
-        const auto& data = s.data();
-        if (!MatchesYokeId(data, yokeId)) {
-            continue;
-        }
-        const std::string busId = FormatBusId(ResolveBusIdFromData(data));
-        handler.seenIds.insert(busId);
-
+template <>
+struct MessageTraits<Gamepad::Button> {
+    static std::optional<std::string> FormatTable(const Gamepad::Button& data)
+    {
         bool btnChanging = false;
         if (!TryReadBool(data.btnChanging(), btnChanging) || !btnChanging) {
-            continue;
+            return std::nullopt;
         }
-
         Common::ButtonState_t btnState = Common::ButtonState_t::Invalid;
         if (!TryReadButtonState(data.btnState(), btnState)) {
+            return std::nullopt;
+        }
+        if (btnState != Common::ButtonState_t::Down && btnState != Common::ButtonState_t::Up) {
+            return std::nullopt;
+        }
+        return std::string(btnState == Common::ButtonState_t::Down ? "down" : "up");
+    }
+
+    static void LogRxRaw(const std::string& name, const std::string& busId,
+                         const Gamepad::Button& data)
+    {
+        Common::ButtonState_t btnState = Common::ButtonState_t::Invalid;
+        TryReadButtonState(data.btnState(), btnState);
+        std::cout << "rx_raw topic=" << name
+                  << " id=" << busId
+                  << " state=" << (btnState == Common::ButtonState_t::Down ? "down" : "up")
+                  << " changing=true" << std::endl;
+    }
+
+    static bool Apply(const Gamepad::Button& data, int messageId,
+                      mapper::MappingEngine& engine, mapper::GamepadState& state)
+    {
+        Common::ButtonState_t btnState = Common::ButtonState_t::Invalid;
+        TryReadButtonState(data.btnState(), btnState);
+        const float mappedValue = (btnState == Common::ButtonState_t::Down) ? 1.0f : 0.0f;
+        return engine.Apply("btnState", messageId, mappedValue, state);
+    }
+
+    static void LogRx(const std::string& name, const std::string& busId,
+                      const Gamepad::Button& data)
+    {
+        Common::ButtonState_t btnState = Common::ButtonState_t::Invalid;
+        TryReadButtonState(data.btnState(), btnState);
+        std::cout << "rx topic=" << name
+                  << " id=" << busId
+                  << " state=" << (btnState == Common::ButtonState_t::Down ? "down" : "up")
+                  << std::endl;
+    }
+};
+
+template <typename MsgT>
+bool ProcessSamples(TopicHandler<MsgT>& handler,
+                    mapper::GamepadState& state,
+                    emulator::IVigemClient& client,
+                    const RxOutput& output,
+                    int yokeId)
+{
+    using Traits = MessageTraits<MsgT>;
+    auto samples = handler.reader.take();
+    for (const auto& s : samples) {
+        if (!s.info().valid()) {
             continue;
         }
-
-        float mappedValue = 0.0f;
-        if (btnState == Common::ButtonState_t::Down) {
-            mappedValue = 1.0f;
-        } else if (btnState == Common::ButtonState_t::Up) {
-            mappedValue = 0.0f;
-        } else {
+        ++handler.totalValidSamples;
+        const auto& data = s.data();
+        if (!MatchesYokeId(data, yokeId)) {
             continue;
         }
-
+        const std::string busId = FormatBusId(ResolveBusIdFromData(data));
+        handler.seenIds.insert(busId);
         const int messageId = ResolveRoleFromData(data);
 
-        if (output.table != nullptr) {
-            output.table->Update(handler.name,
-                                 busId,
-                                 btnState == Common::ButtonState_t::Down ? "down" : "up");
-        } else if (output.logRxRaw) {
-            std::cout << "rx_raw topic=" << handler.name
-                      << " id=" << busId
-                      << " state=" << (btnState == Common::ButtonState_t::Down ? "down" : "up")
-                      << " changing=true" << std::endl;
+        auto tableValue = Traits::FormatTable(data);
+        if (!tableValue.has_value()) {
+            continue;  // pre-filtered (e.g. button not changing)
         }
 
-        if (!handler.mappingEngine.Apply("btnState", messageId, mappedValue, state)) {
+        if (output.table != nullptr) {
+            output.table->Update(handler.name, busId, *tableValue);
+        } else if (output.logRxRaw) {
+            Traits::LogRxRaw(handler.name, busId, data);
+        }
+
+        if (!Traits::Apply(data, messageId, handler.mappingEngine, state)) {
             continue;
         }
 
@@ -379,13 +339,9 @@ bool ProcessButtonSamples(ButtonHandler& handler,
         }
 
         if (output.table == nullptr && output.logRx) {
-            std::cout << "rx topic=" << handler.name
-                      << " id=" << busId
-                      << " state=" << (btnState == Common::ButtonState_t::Down ? "down" : "up")
-                      << std::endl;
+            Traits::LogRx(handler.name, busId, data);
         }
     }
-
     return true;
 }
 
@@ -476,8 +432,12 @@ int AppRunner::Run(const AppRunnerOptions& options,
         dds::domain::DomainParticipant participant(options.domainId);
         dds::sub::Subscriber subscriber(participant);
 
-        using TopicHandler = std::variant<AnalogHandler, StickHandler, ButtonHandler>;
-        std::vector<TopicHandler> handlers;
+        using HandlerVariant = std::variant<
+            TopicHandler<Gamepad::Gamepad_Analog>,
+            TopicHandler<Gamepad::Stick_TwoAxis>,
+            TopicHandler<Gamepad::Button>
+        >;
+        std::vector<HandlerVariant> handlers;
         handlers.reserve(roleConfig.app_configs.size());
         for (const auto& config : roleConfig.app_configs) {
             if (options.logStartup && !options.tableMode) {
@@ -500,22 +460,22 @@ int AppRunner::Run(const AppRunnerOptions& options,
             }
             switch (config.topicType) {
                 case common::TopicType::GamepadAnalog:
-                    handlers.emplace_back(AnalogHandler(participant,
-                                                        subscriber,
-                                                        config.dds.topic,
-                                                        mapper::MappingEngine(config.mappings)));
+                    handlers.emplace_back(
+                        TopicHandler<Gamepad::Gamepad_Analog>(participant, subscriber,
+                                                              config.dds.topic,
+                                                              mapper::MappingEngine(config.mappings)));
                     break;
                 case common::TopicType::StickTwoAxis:
-                    handlers.emplace_back(StickHandler(participant,
-                                                       subscriber,
-                                                       config.dds.topic,
-                                                       mapper::MappingEngine(config.mappings)));
+                    handlers.emplace_back(
+                        TopicHandler<Gamepad::Stick_TwoAxis>(participant, subscriber,
+                                                             config.dds.topic,
+                                                             mapper::MappingEngine(config.mappings)));
                     break;
                 case common::TopicType::GamepadButton:
-                    handlers.emplace_back(ButtonHandler(participant,
-                                                        subscriber,
-                                                        config.dds.topic,
-                                                        mapper::MappingEngine(config.mappings)));
+                    handlers.emplace_back(
+                        TopicHandler<Gamepad::Button>(participant, subscriber,
+                                                      config.dds.topic,
+                                                      mapper::MappingEngine(config.mappings)));
                     break;
             }
         }
@@ -566,29 +526,9 @@ int AppRunner::Run(const AppRunnerOptions& options,
         poller.Poll();
 
             for (auto& handler : handlers) {
-            struct HandlerVisitor {
-                mapper::GamepadState& state;
-                emulator::IVigemClient& client;
-                const RxOutput& output;
-                int yokeId;
-
-                bool operator()(AnalogHandler& topicHandler) const
-                {
-                    return ProcessAnalogSamples(topicHandler, state, client, output, yokeId);
-                }
-
-                bool operator()(StickHandler& topicHandler) const
-                {
-                    return ProcessStickSamples(topicHandler, state, client, output, yokeId);
-                }
-
-                bool operator()(ButtonHandler& topicHandler) const
-                {
-                    return ProcessButtonSamples(topicHandler, state, client, output, yokeId);
-                }
-            };
-
-                const bool ok = std::visit(HandlerVisitor{state, client, output, options.yokeId}, handler);
+                const bool ok = std::visit([&](auto& topicHandler) {
+                    return ProcessSamples(topicHandler, state, client, output, options.yokeId);
+                }, handler);
                 if (!ok) {
                     SetLastError(std::string("Runtime error: ") + client.LastError());
                     std::cerr << LastError() << std::endl;
