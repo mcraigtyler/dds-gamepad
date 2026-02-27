@@ -250,15 +250,7 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
         DESTINATION ${INSTALL_DIR}
     )
 
-    # Install role-based config files used by the application.
-    install(FILES
-        "${CMAKE_CURRENT_SOURCE_DIR}/config/driver.yaml"
-        "${CMAKE_CURRENT_SOURCE_DIR}/config/gunner.yaml"
-        "${CMAKE_CURRENT_SOURCE_DIR}/config/combined.yaml"
-        "${CMAKE_CURRENT_SOURCE_DIR}/config/README.md"
-        DESTINATION ${INSTALL_DIR}/config)
-
-    # Service convention: config lives next to the service executable.
+    # Config files — installed to bin/config only (next to both executables).
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/config/driver.yaml"
         "${CMAKE_CURRENT_SOURCE_DIR}/config/gunner.yaml"
