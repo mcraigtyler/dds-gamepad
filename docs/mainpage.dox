@@ -50,25 +50,123 @@
 ///
 /// ---
 ///
-/// @section msg_flow Message Flow
+/// @section loop_internals Read Loop and TopicHandler Internals
 ///
-/// The sequence below traces a single DDS sample from arrival to gamepad
-/// output. `AppRunner` drives the outer loop; `TopicHandler` handles
-/// per-topic reading and filtering; `MappingEngine` applies the transform
-/// pipeline; `VigemClient` converts to the native wire format.
+/// Understanding this section is essential for anyone modifying the data path
+/// or adding new DDS topic types.
+///
+/// **TopicHandler**
+///
+/// `TopicHandler<MsgT>` is a template struct internal to `AppRunner.cpp`.
+/// One instance is created per `AppConfig` entry in the YAML (i.e. per unique
+/// DDS topic subscription). Each handler owns:
+/// - A `dds::sub::DataReader<MsgT>` bound to its topic.
+/// - A `mapper::MappingEngine` initialised with the mappings for that topic.
+/// - A `totalValidSamples` counter and a `seenIds` set, both shared with
+///   `StatusPoller` via raw pointers for live dashboard metrics.
+///
+/// All handlers are stored as `std::variant<TopicHandler<Gamepad_Analog>,
+/// TopicHandler<Stick_TwoAxis>, TopicHandler<Button>>` in a `std::vector`,
+/// iterated with `std::visit` each loop iteration.
+///
+/// **StatusPoller — display only, no data pipeline effect**
+///
+/// `StatusPoller` is a display-only component. It never reads DDS samples,
+/// never writes to `OutputState`, and never calls `IOutputDevice::UpdateState`.
+/// Removing it entirely would not change gamepad behaviour in any way.
+///
+/// It is only active when `--table` mode is enabled. When `AppRunner` is run
+/// without `--table` the poller is constructed with a `nullptr` table and
+/// every method is a no-op with zero cost.
+///
+/// When active, it reads two things from each handler:
+/// - The `totalValidSamples` counter (written by `ProcessSamples`) to compute
+///   a samples-per-second rate.
+/// - DDS QoS status APIs on the reader — matched writers, liveliness,
+///   deadline misses, lost/rejected samples — as read-only health queries that
+///   do not consume any samples from the DDS queue.
+///
+/// All results are forwarded to `RxTable::SetTopicStatus` for display.
+///
+/// **Data reading: polled at 50 ms, buffered by DDS**
+///
+/// DDS data reception is **two-layered**:
+///
+/// 1. **CycloneDDS (event-driven):** The middleware receives incoming network
+///    packets on its own internal threads and silently buffers samples into
+///    each reader's history cache. The application does not participate in
+///    this step at all. The reader QoS is `History::KeepLast(16)`, meaning
+///    up to 16 unread samples are retained per publisher. If more than 16
+///    arrive between `take()` calls, the oldest are silently dropped.
+///
+/// 2. **Application (polled at 50 ms):** `reader.take()` is called once per
+///    loop iteration and atomically drains all currently buffered samples in
+///    one shot. This is the only place in the codebase where DDS data is
+///    consumed by the application.
+///
+/// The **50 ms loop is the data reading loop**. `StatusPoller::Poll()` runs
+/// at the top of that same loop purely as a convenience — the loop was not
+/// created for it. The effective worst-case latency from a sample being
+/// received by the DDS middleware to the gamepad being updated is
+/// approximately 50 ms. If several samples arrive during the sleep window
+/// they are all processed in the next iteration's `take()` call.
+///
+/// **Per-sample UpdateState**
+///
+/// `UpdateState` is called **immediately after each matched sample**, not once
+/// per loop iteration. If three samples arrive in a single 50 ms window, the
+/// virtual controller receives three updates. This minimises latency at the
+/// cost of slightly redundant ViGEm API calls.
+///
+/// **OutputState persistence**
+///
+/// `OutputState::channels` is **never cleared** between iterations. A channel
+/// holds its last written value until a new DDS sample overwrites it. If a DDS
+/// source stops transmitting, the gamepad axis or button freezes at its last
+/// known value. This is intentional — it mirrors the behaviour of a physical
+/// controller that holds its last position when input is lost.
+///
+/// **Button pre-filter**
+///
+/// `Gamepad::Button` messages are pre-filtered by `btnChanging`. If
+/// `btnChanging` is not `true`, the sample is silently discarded before
+/// `MappingEngine::Apply` is called. This prevents redundant `UpdateState`
+/// calls for button-held events where the state has not actually changed.
+///
+/// **Full loop sequence**
 ///
 /// @msc
-/// AppRunner, TopicHandler, MappingEngine, OutputState, IOutputDevice;
-/// --- [label="read-loop iteration"];
-/// AppRunner  -> TopicHandler  [label="take() samples"];
-/// TopicHandler -> TopicHandler [label="filter: yokeId match?"];
+/// AppRunner, StatusPoller, TopicHandler, MappingEngine, IOutputDevice, RxTable;
+/// --- [label="every 50 ms"];
+/// AppRunner   -> StatusPoller  [label="Poll()"];
+/// StatusPoller -> StatusPoller [label="elapsed >= 500 ms?"];
+/// StatusPoller -> RxTable      [label="SetTopicStatus(topic, \"N sps\")"];
+/// --- [label="for each TopicHandler (via std::visit)"];
+/// AppRunner   -> TopicHandler  [label="reader.take()"];
+/// TopicHandler -> TopicHandler [label="skip if !valid() or yokeId mismatch\nor btnChanging==false (Button only)"];
 /// TopicHandler -> MappingEngine [label="Apply(field, id, rawValue, state)"];
 /// MappingEngine -> MappingEngine [label="normalise: input-range,\nscale, deadzone, invert"];
-/// MappingEngine -> OutputState  [label="channels[target] = value"];
-/// MappingEngine -> TopicHandler [label="true (matched)"];
-/// AppRunner  -> IOutputDevice   [label="UpdateState(state)"];
-/// IOutputDevice -> IOutputDevice [label="convert to\nXUSB_REPORT"];
+/// MappingEngine -> TopicHandler [label="true (matched) / false (no match)"];
+/// TopicHandler -> RxTable       [label="Update(topic, busId, value)  [table mode]"];
+/// AppRunner   -> IOutputDevice  [label="UpdateState(state)  [per matched sample]"];
+/// IOutputDevice -> RxTable      [label="SetTxStateLine()  via OnTxState callback"];
+/// --- [label="SleepWithStop(50 ms, stopToken)"];
 /// @endmsc
+///
+/// ---
+///
+/// @section msg_flow Single Sample: Field Extraction
+///
+/// `MessageTraits<MsgT>` is a template specialisation (one per IDL type) that
+/// knows how to extract fields from a raw DDS sample. It decouples field
+/// extraction from the generic `ProcessSamples` function and from
+/// `MappingEngine`, which only deals in `float` values and field name strings.
+///
+/// | IDL type | Fields extracted | `Apply` call(s) |
+/// |----------|-----------------|-----------------|
+/// | `Gamepad_Analog` | `value` | `Apply("value", id, value, state)` |
+/// | `Stick_TwoAxis`  | `x`, `y` | `Apply("x", ...)` then `Apply("y", ...)` |
+/// | `Button`         | `btnState` → mapped to `1.0` (Down) or `0.0` (Up) | `Apply("btnState", id, 0/1, state)` |
 ///
 /// ---
 ///

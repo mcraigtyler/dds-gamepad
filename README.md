@@ -35,13 +35,13 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 The `dds-gamepad` executable now accepts a **single role config file**, domain id, and yoke id.
 
 ```powershell
-.\install\boilerplate-dds\bin\dds-gamepad.exe <config_file> <domain_id> <yoke_id>
+.\bin\dds-gamepad.exe <config_file> <domain_id> <yoke_id>
 ```
 
 Example:
 
 ```powershell
-.\install\boilerplate-dds\bin\dds-gamepad.exe .\install\boilerplate-dds\config\driver.yaml 0 1004 --table
+.\bin\dds-gamepad.exe .\config\combined.yaml 0 1004 --table
 ```
 
 ### Role-based config schema
@@ -131,7 +131,7 @@ Compress-Archive -Path install\dds-gamepad\* -DestinationPath release\dds-gamepa
 
 ```powershell
 cd bin
-.\dds-gamepad.exe ..\config\driver.yaml 0 1004
+.\dds-gamepad.exe ..\config\driver.yaml 50 1004 --table
 ```
 
 ## Windows Service
@@ -148,7 +148,7 @@ To install/start/stop the service (run PowerShell as Administrator):
 
 ```powershell
 cd C:\dds-gamepad
-.\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 0 -YokeId 1004 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
+.\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 50 -YokeId 1004 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
 .\install_service.ps1 -Action Start
 ```
 

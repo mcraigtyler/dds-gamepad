@@ -11,17 +11,28 @@ namespace console { class RxTable; }
 
 namespace app {
 
-/// @brief Polls DDS reader status metrics every 500 ms and forwards formatted
-///        strings to an `RxTable` dashboard row.
+/// @brief Display-only component that renders DDS health metrics to the live
+///        console dashboard. Has no effect on the data pipeline.
 ///
-/// @details `StatusPoller` is driven by `AppRunner`'s main read loop via a
-/// single `Poll()` call per iteration. It accumulates sample-count deltas
-/// across sources registered with `AddSource` and computes a samples-per-second
-/// figure for each topic.
+/// @details `StatusPoller` is **purely a display component**. It never reads
+/// DDS samples, never writes to `OutputState`, and never calls
+/// `IOutputDevice::UpdateState`. It has no bearing on gamepad output.
 ///
-/// When constructed with `nullptr` as the table pointer, all methods are
-/// no-ops. This allows `AppRunner` to create a `StatusPoller` unconditionally
-/// and only activate it when `tableMode` is enabled.
+/// It is only active when `AppRunner` is running in `tableMode` (the
+/// `--table` CLI flag). When constructed with `nullptr`, every method is a
+/// no-op and the poller has zero runtime cost.
+///
+/// When active, `Poll()` is called once per read-loop iteration (every 50 ms).
+/// It checks whether 500 ms have elapsed and, if so, queries two sources of
+/// information for each registered topic:
+/// - The `totalValidSamples` counter (written by `ProcessSamples` in
+///   `AppRunner`; read here to compute a per-second rate).
+/// - DDS QoS status APIs on the `AnyDataReader` —
+///   `subscription_matched_status`, `liveliness_changed_status`,
+///   `sample_lost_status`, etc. These are **read-only status queries** that
+///   do not consume any samples from the DDS queue.
+///
+/// All computed metrics are forwarded to `RxTable::SetTopicStatus` for display.
 class StatusPoller {
 public:
     /// @brief Constructs the poller.
@@ -37,8 +48,9 @@ public:
     ///
     /// @param[in]     topicName          Display name used to identify the
     ///                table row (must match an entry from `RxTable::Begin`).
-    /// @param[in]     reader             DDS reader whose status conditions are
-    ///                queried each poll interval.
+    /// @param[in]     reader             DDS reader whose QoS status APIs are
+    ///                queried for display metrics (matched writers, liveliness,
+    ///                lost/rejected samples). Never used to read data.
     /// @param[in,out] totalValidSamples  Pointer to the per-topic sample counter
     ///                maintained by `TopicHandler` in `AppRunner`. The poller
     ///                reads this on each poll to compute the delta.
