@@ -38,6 +38,16 @@ public:
 /// 2. Call `Connect()` — throws `std::runtime_error` on failure.
 /// 3. Call `UpdateState()` on every read-loop iteration.
 ///
+/// @msc
+/// AppRunner, IOutputDevice, ITxStateListener;
+/// AppRunner -> IOutputDevice  [label="Connect()"];
+/// AppRunner <- IOutputDevice  [label="(success or throws)"];
+/// --- [label="hot-path loop"];
+/// AppRunner -> IOutputDevice  [label="UpdateState(state)"];
+/// IOutputDevice -> ITxStateListener [label="OnTxState(state)"];
+/// AppRunner <- IOutputDevice  [label="true / false"];
+/// @endmsc
+///
 /// @section optional_hooks Optional Hooks
 /// `SetLogState` and `SetTxStateListener` have default no-op implementations
 /// so minimal backends (e.g. test stubs) need not override them.

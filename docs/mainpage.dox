@@ -1,0 +1,84 @@
+/// @mainpage dds-gamepad
+///
+/// `dds-gamepad` subscribes to DDS topics carrying raw input values from an
+/// external hardware device and translates them into a virtual Xbox 360
+/// gamepad exposed to Windows via the ViGEmBus driver. The virtual controller
+/// is consumed by an Unreal Engine game that maps it to vehicle controls
+/// (steering, throttle, brake, turret, weapons).
+///
+/// ---
+///
+/// @section arch_overview Architecture Overview
+///
+/// Each configured DDS subscription is managed by a `TopicHandler`, which
+/// owns a `DataReader` and a `MappingEngine`. On every read-loop iteration,
+/// `AppRunner` polls all handlers, accumulates results into a shared
+/// `OutputState` channel map, then submits the map to the output backend.
+///
+/// @dot
+/// digraph Architecture {
+///   rankdir=LR;
+///   node [shape=box, fontname="Helvetica", style=filled, fontsize=11];
+///
+///   subgraph cluster_dds {
+///     label="DDS Middleware";
+///     style=dashed; color=grey;
+///     R1 [label="DataReader\n(Gamepad_Analog)", fillcolor=lightyellow];
+///     R2 [label="DataReader\n(Stick_TwoAxis)",  fillcolor=lightyellow];
+///     R3 [label="DataReader\n(Button)",          fillcolor=lightyellow];
+///   }
+///
+///   subgraph cluster_handlers {
+///     label="TopicHandler<T>  (one per subscription)";
+///     style=dashed; color=grey;
+///     ME1 [label="MappingEngine", fillcolor=lightblue];
+///     ME2 [label="MappingEngine", fillcolor=lightblue];
+///     ME3 [label="MappingEngine", fillcolor=lightblue];
+///   }
+///
+///   OS  [label="OutputState\n(channel map)",    fillcolor=lightgrey];
+///   OD  [label="IOutputDevice",                 fillcolor=lightgrey];
+///   VG  [label="ViGEmBus\n(kernel driver)",     fillcolor=lightyellow, shape=ellipse];
+///   XB  [label="Virtual\nXbox 360 Pad",         fillcolor=lightyellow, shape=ellipse];
+///
+///   R1 -> ME1 -> OS;
+///   R2 -> ME2 -> OS;
+///   R3 -> ME3 -> OS;
+///   OS -> OD -> VG -> XB;
+/// }
+/// @enddot
+///
+/// ---
+///
+/// @section msg_flow Message Flow
+///
+/// The sequence below traces a single DDS sample from arrival to gamepad
+/// output. `AppRunner` drives the outer loop; `TopicHandler` handles
+/// per-topic reading and filtering; `MappingEngine` applies the transform
+/// pipeline; `VigemClient` converts to the native wire format.
+///
+/// @msc
+/// AppRunner, TopicHandler, MappingEngine, OutputState, IOutputDevice;
+/// --- [label="read-loop iteration"];
+/// AppRunner  -> TopicHandler  [label="take() samples"];
+/// TopicHandler -> TopicHandler [label="filter: yokeId match?"];
+/// TopicHandler -> MappingEngine [label="Apply(field, id, rawValue, state)"];
+/// MappingEngine -> MappingEngine [label="normalise: input-range,\nscale, deadzone, invert"];
+/// MappingEngine -> OutputState  [label="channels[target] = value"];
+/// MappingEngine -> TopicHandler [label="true (matched)"];
+/// AppRunner  -> IOutputDevice   [label="UpdateState(state)"];
+/// IOutputDevice -> IOutputDevice [label="convert to\nXUSB_REPORT"];
+/// @endmsc
+///
+/// ---
+///
+/// @section pages Key Pages
+///
+/// | Component | Role |
+/// |-----------|------|
+/// | app::AppRunner | Orchestrates the read loop and owns the session lifecycle |
+/// | app::StopToken | Cooperative shutdown signal passed to the loop |
+/// | mapper::MappingEngine | Applies scale, deadzone, invert, and input-range transforms |
+/// | emulator::IOutputDevice | Abstract backend interface — implemented by VigemClient and UdpProtobufEmulator |
+/// | config::ConfigLoader | Parses role YAML into RoleConfig / MappingDefinition structs |
+/// | common::OutputState | Generic float channel map passed between mapper and backend |

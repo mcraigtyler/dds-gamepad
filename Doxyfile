@@ -14,7 +14,8 @@ OUTPUT_DIRECTORY       = docs/generated
 # Input
 # Listed explicitly to exclude IDL-generated headers in the build directory.
 #---------------------------------------------------------------------------
-INPUT                  = src/emulator/IOutputDevice.h \
+INPUT                  = docs/mainpage.dox \
+                         src/emulator/IOutputDevice.h \
                          src/app/AppRunner.h \
                          src/app/StopToken.h \
                          src/mapper/MappingEngine.h \
@@ -80,10 +81,13 @@ INLINE_SOURCES         = NO
 
 #---------------------------------------------------------------------------
 # Diagrams
-# Requires Graphviz (dot) on PATH. Set HAVE_DOT = NO if not installed.
+# Requires Graphviz. DOT_PATH points directly to the bin directory so
+# Doxygen does not rely on PATH. If Graphviz is reinstalled to a different
+# location, update DOT_PATH accordingly. Set HAVE_DOT = NO if not installed.
 # The most useful diagram is the IOutputDevice inheritance tree.
 #---------------------------------------------------------------------------
 HAVE_DOT               = YES
+DOT_PATH               = C:/Program Files/Graphviz/bin
 CLASS_DIAGRAMS         = YES
 COLLABORATION_GRAPH    = NO
 INCLUDE_GRAPH          = NO

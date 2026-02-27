@@ -129,6 +129,73 @@ enum class ChannelType {
 
 ---
 
+## Diagrams
+
+Doxygen has two built-in diagram commands that require no extra tools beyond
+what is already configured.
+
+| Command | Use for | Extra tools |
+|---------|---------|-------------|
+| `@dot` / `@enddot` | Data flow, architecture, dependency graphs | Graphviz (`HAVE_DOT = YES` in Doxyfile) |
+| `@msc` / `@endmsc` | Sequence diagrams (call sequences, lifecycles) | None — built into Doxygen |
+
+> **`@dot` does NOT support sequence diagrams.** Use `@msc` for any diagram
+> that shows messages between participants over time.
+
+### `@dot` — Architecture / Data Flow
+
+Uses [Graphviz DOT language](https://graphviz.org/doc/info/lang.html). Good
+for showing how components connect, data pipelines, and module dependencies.
+
+```cpp
+/// @details System data flow:
+///
+/// @dot
+/// digraph DataFlow {
+///   rankdir=LR;
+///   node [shape=box, fontname="Helvetica", style=filled, fillcolor=lightgrey];
+///   DDS [label="DDS Topics"];
+///   AR  [label="AppRunner"];
+///   ME  [label="MappingEngine"];
+///   OS  [label="OutputState"];
+///   OD  [label="IOutputDevice"];
+///   DDS -> AR -> ME -> OS -> OD;
+/// }
+/// @enddot
+```
+
+Common DOT attributes: `rankdir=LR` (left-to-right layout), `shape=box|ellipse|diamond`,
+`style=filled`, `fillcolor=lightgrey|lightblue`, `label="text"`, `->` (directed edge).
+
+### `@msc` — Sequence Diagram
+
+Uses [MSC (Message Sequence Chart)](https://www.doxygen.nl/manual/commands.html#cmdmsc)
+syntax built into Doxygen. Good for showing call sequences and lifecycle steps.
+
+```cpp
+/// @details Lifecycle call sequence:
+///
+/// @msc
+/// Caller, MyClass, Observer;
+/// Caller -> MyClass [label="Connect()"];
+/// Caller <- MyClass [label="(success or throws)"];
+/// --- [label="hot-path loop"];
+/// Caller -> MyClass  [label="UpdateState(state)"];
+/// MyClass -> Observer [label="OnNotify(state)"];
+/// Caller <- MyClass  [label="true"];
+/// @endmsc
+```
+
+MSC syntax essentials:
+- First line declares participants (comma-separated, ends with `;`)
+- `A -> B [label="msg"]` — message from A to B
+- `A <- B [label="reply"]` — return message
+- `--- [label="text"]` — horizontal separator with label
+- `...` — time gap (omission)
+- `A note A [label="text"]` — note on a participant
+
+---
+
 ## Doxyfile Settings That Enforce Coverage
 
 These settings are intentional — do not change them:

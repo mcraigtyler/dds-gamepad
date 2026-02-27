@@ -43,6 +43,20 @@ struct AppRunnerOptions
 /// service (`ServiceMain.cpp`). The service passes a `StopToken` tied to
 /// `SERVICE_CONTROL_STOP`; the console blocks until Ctrl-C sets the token.
 ///
+/// **System data flow:**
+/// @dot
+/// digraph DataFlow {
+///   rankdir=LR;
+///   node [shape=box, fontname="Helvetica", style=filled, fillcolor=lightgrey];
+///   DDS [label="DDS Topics"];
+///   AR  [label="AppRunner\n(read loop)"];
+///   ME  [label="MappingEngine\n(normalize)"];
+///   OS  [label="OutputState\n(channel map)"];
+///   OD  [label="IOutputDevice\n(backend)"];
+///   DDS -> AR -> ME -> OS -> OD;
+/// }
+/// @enddot
+///
 /// @section usage Usage
 /// @code
 /// app::StopSource source;
