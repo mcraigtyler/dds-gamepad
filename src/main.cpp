@@ -1,77 +1,157 @@
-﻿// main.cpp
-#include <chrono>
-#include <cstdlib>
+﻿#include <cstdlib>
+#include <exception>
 #include <iostream>
+#include <optional>
 #include <string>
-#include <thread>
 
-#include "dds_includes.h"
-#include "Value.hpp"
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <Windows.h>
 
-namespace {
+#include "app/AppRunner.h"
+#include "version.h"
+
 void print_usage(const char* exe)
 {
-    std::cerr << "Usage: " << exe << " <sub_topic> <pub_topic> [domain_id]" << std::endl;
+    std::cerr << "Usage: " << exe << " <config_file> <domain_id> <yoke_id> [--debug | --table]" << std::endl;
+    std::cerr << "       " << exe << " --help" << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "Args:" << std::endl;
+    std::cerr << "  <config_file>     YAML role config file (for example: config/driver.yaml)." << std::endl;
+    std::cerr << "  <domain_id>       DDS domain id (integer)." << std::endl;
+    std::cerr << "  <yoke_id>         Yoke sub_role id used to filter incoming DDS messages." << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "Options:" << std::endl;
+    std::cerr << "  --debug            Enable verbose raw input logging (rx_raw...)." << std::endl;
+    std::cerr << "  --table            Live table + a tx state line (no scrolling)." << std::endl;
+    std::cerr << "  --version          Print version and exit." << std::endl;
+    std::cerr << "  -h, --help         Show this help text." << std::endl;
 }
+
+namespace
+{
+app::StopSource* gStopSource = nullptr;
+
+BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType)
+{
+    switch (ctrlType) {
+        case CTRL_C_EVENT:
+        case CTRL_BREAK_EVENT:
+        case CTRL_CLOSE_EVENT:
+        case CTRL_SHUTDOWN_EVENT:
+            if (gStopSource != nullptr) {
+                gStopSource->RequestStop();
+                return TRUE;
+            }
+            return FALSE;
+        default:
+            return FALSE;
+    }
 }
+} // namespace
 
 int main(int argc, char* argv[])
 {
-    if (argc < 3) {
+    if (argc < 2) {
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
 
-    const std::string sub_topic_name = argv[1];
-    const std::string pub_topic_name = argv[2];
-
-    int domain_id = 0;
-    if (argc >= 4) {
-        try {
-            domain_id = std::stoi(argv[3]);
-        } catch (const std::exception&) {
-            std::cerr << "Invalid domain_id: " << argv[3] << std::endl;
+    bool log_rx_raw = false;
+    bool table_mode = false;
+    std::string config_path;
+    std::optional<int> domain_id;
+    std::optional<int> yoke_id;
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--version") {
+            std::cout << APP_VERSION_FULL << std::endl;
+            return EXIT_SUCCESS;
+        }
+        if (arg == "-h" || arg == "--help") {
+            print_usage(argv[0]);
+            return EXIT_SUCCESS;
+        }
+        if (arg == "--debug") {
+            log_rx_raw = true;
+            continue;
+        }
+        if (arg == "--table") {
+            table_mode = true;
+            continue;
+        }
+        if (!arg.empty() && arg[0] == '-') {
+            std::cerr << "Unknown option: " << arg << std::endl;
+            print_usage(argv[0]);
             return EXIT_FAILURE;
         }
-    }
-
-    dds::domain::DomainParticipant participant(domain_id);
-
-    dds::topic::Topic<Value::Msg> sub_topic(participant, sub_topic_name);
-    dds::topic::Topic<Value::Msg> pub_topic(participant, pub_topic_name);
-
-    dds::sub::Subscriber subscriber(participant);
-    dds::pub::Publisher publisher(participant);
-
-    dds::sub::DataReader<Value::Msg> reader(subscriber, sub_topic);
-    dds::pub::DataWriter<Value::Msg> writer(publisher, pub_topic);
-
-    std::cout << "Subscribing to '" << sub_topic_name << "', publishing to '" << pub_topic_name
-              << "' (domain " << domain_id << ")" << std::endl;
-
-    uint32_t message_id = 0;
-    auto next_pub = std::chrono::steady_clock::now();
-
-    while (true) {
-        const auto now = std::chrono::steady_clock::now();
-        if (now >= next_pub) {
-            Value::Msg msg;
-            msg.messageID(static_cast<long>(message_id));
-            msg.value(static_cast<float>(message_id));
-            writer.write(msg);
-            ++message_id;
-            next_pub = now + std::chrono::seconds(1);
+        if (config_path.empty()) {
+            config_path = arg;
+            continue;
         }
-
-        auto samples = reader.take();
-        for (const auto& s : samples) {
-            if (!s.info().valid()) {
-                continue;
+        if (!domain_id.has_value()) {
+            try {
+                domain_id = std::stoi(arg);
+            } catch (const std::exception&) {
+                std::cerr << "Invalid domain_id: " << arg << std::endl;
+                return EXIT_FAILURE;
             }
-            std::cout << "rx messageID=" << s.data().messageID()
-                      << " value=" << s.data().value() << std::endl;
+            continue;
+        }
+        if (!yoke_id.has_value()) {
+            try {
+                yoke_id = std::stoi(arg);
+            } catch (const std::exception&) {
+                std::cerr << "Invalid yoke_id: " << arg << std::endl;
+                return EXIT_FAILURE;
+            }
+            continue;
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::cerr << "Unexpected argument: " << arg << std::endl;
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
     }
+
+    if (config_path.empty()) {
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    if (!domain_id.has_value()) {
+        std::cerr << "Missing required domain_id." << std::endl;
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    if (!yoke_id.has_value()) {
+        std::cerr << "Missing required yoke_id." << std::endl;
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    if (table_mode && log_rx_raw) {
+        std::cerr << "Options --debug and --table are mutually exclusive." << std::endl;
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    app::AppRunnerOptions options;
+    options.configFile = config_path;
+    options.domainId = *domain_id;
+    options.yokeId = *yoke_id;
+    options.logRxRaw = log_rx_raw;
+    options.tableMode = table_mode;
+
+    app::StopSource stopSource;
+    gStopSource = &stopSource;
+    SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
+
+    app::AppRunner runner;
+    const int exitCode = runner.Run(options, stopSource.Token());
+
+    SetConsoleCtrlHandler(ConsoleCtrlHandler, FALSE);
+    gStopSource = nullptr;
+    return exitCode;
 }

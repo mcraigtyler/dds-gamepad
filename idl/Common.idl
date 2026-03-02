@@ -1,0 +1,21 @@
+#include "Standard_types.idl"
+
+module Common 
+{
+    @autoid @final @nested
+    struct BusIdentifier_t 
+    {
+        Standard_types::int32_t role;
+        Standard_types::int32_t sub_role;
+    };
+
+    typedef sequence<BusIdentifier_t> BusIdentifiers_t;
+
+    @appendable
+    enum ButtonState_t 
+    {
+        Invalid,
+        Down,
+        Up
+    };
+};

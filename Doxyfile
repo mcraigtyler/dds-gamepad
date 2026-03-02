@@ -1,0 +1,103 @@
+# Doxyfile for dds-gamepad2
+# Run from the repository root: doxygen Doxyfile
+# Output: docs/generated/html/index.html
+
+#---------------------------------------------------------------------------
+# Project identity
+#---------------------------------------------------------------------------
+PROJECT_NAME           = "dds-gamepad"
+PROJECT_BRIEF          = "Translates DDS topics into a virtual Xbox 360 gamepad via ViGEmBus"
+PROJECT_NUMBER         = 0.3
+OUTPUT_DIRECTORY       = docs/generated
+
+#---------------------------------------------------------------------------
+# Input
+# Listed explicitly to exclude IDL-generated headers in the build directory.
+#---------------------------------------------------------------------------
+INPUT                  = docs/mainpage.dox \
+                         src/emulator/IOutputDevice.h \
+                         src/app/AppRunner.h \
+                         src/app/StopToken.h \
+                         src/mapper/MappingEngine.h \
+                         src/config/ConfigLoader.h \
+                         src/common/MappingDefinition.h \
+                         src/common/OutputState.h \
+                         src/emulator/VigemClient.h \
+                         src/emulator/UdpProtobufEmulator.h \
+                         src/console/RxTable.h \
+                         src/app/StatusPoller.h \
+                         src/service/EventLog.h \
+                         src/mapper/GamepadState.h \
+                         src/dds_includes.h
+RECURSIVE              = NO
+FILE_PATTERNS          = *.h
+
+#---------------------------------------------------------------------------
+# Extraction behaviour
+# Only documented symbols appear in the output. Undocumented public members
+# produce warnings so gaps are visible in the warning log.
+#---------------------------------------------------------------------------
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+HIDE_UNDOC_MEMBERS     = YES
+HIDE_UNDOC_CLASSES     = YES
+
+#---------------------------------------------------------------------------
+# Output formats
+#---------------------------------------------------------------------------
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+
+#---------------------------------------------------------------------------
+# Warnings — treat undocumented public symbols as warnings.
+# Check docs/generated/doxygen-warnings.log after each run.
+# Target: zero warnings.
+#---------------------------------------------------------------------------
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_NO_PARAMDOC       = YES
+WARN_LOGFILE           = docs/generated/doxygen-warnings.log
+
+#---------------------------------------------------------------------------
+# Preprocessor
+# Predefine common Windows macros to prevent Doxygen's lexer from
+# choking on platform-specific guards in EventLog.h and StatusPoller.h.
+#---------------------------------------------------------------------------
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+PREDEFINED             = WIN32 \
+                         NOMINMAX \
+                         WIN32_LEAN_AND_MEAN \
+                         _USE_MATH_DEFINES \
+                         DOXYGEN_RUNNING
+
+#---------------------------------------------------------------------------
+# Source browsing — disabled; the IDE provides navigation.
+#---------------------------------------------------------------------------
+SOURCE_BROWSER         = NO
+INLINE_SOURCES         = NO
+
+#---------------------------------------------------------------------------
+# Diagrams
+# Requires Graphviz. DOT_PATH points directly to the bin directory so
+# Doxygen does not rely on PATH. If Graphviz is reinstalled to a different
+# location, update DOT_PATH accordingly. Set HAVE_DOT = NO if not installed.
+# The most useful diagram is the IOutputDevice inheritance tree.
+#---------------------------------------------------------------------------
+HAVE_DOT               = YES
+DOT_PATH               = C:/Program Files/Graphviz/bin
+CLASS_DIAGRAMS         = YES
+COLLABORATION_GRAPH    = NO
+INCLUDE_GRAPH          = NO
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+
+#---------------------------------------------------------------------------
+# Misc
+#---------------------------------------------------------------------------
+QUIET                  = NO
+JAVADOC_AUTOBRIEF      = NO
+TAB_SIZE               = 4
+STRIP_FROM_PATH        = src/

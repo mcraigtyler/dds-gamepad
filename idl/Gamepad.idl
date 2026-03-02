@@ -1,0 +1,42 @@
+#include "Common.idl"
+
+module Gamepad 
+{
+    @autoid @mutable
+    struct GeneralInput 
+    {
+        @key Common::BusIdentifier_t id;
+
+    };
+
+    @autoid @mutable
+    struct Input : GeneralInput
+    {
+        Common::BusIdentifier_t another_id;
+    };
+
+    const string Gamepad_Button_TopicName = "Gamepad_Button";
+    @autoid @mutable
+    struct Button : Input
+    {
+        @optional Common::ButtonState_t btnState;
+        @optional Standard_types::Boolean_t btnChanging;
+
+        Common::BusIdentifier_t yet_another_id;
+        Common::BusIdentifiers_t just_a_series;
+    };
+
+    @autoid @mutable
+    struct Gamepad_Analog : Input
+    {
+        Standard_types::Double_t value;
+    };
+
+    @autoid @mutable
+    struct Stick_TwoAxis : Input
+    {
+        Standard_types::Double_t x;
+        Standard_types::Double_t y;
+    };
+
+};

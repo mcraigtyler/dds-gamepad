@@ -1,6 +1,7 @@
 # Build and IDE files
 build/
 *.exe
+!artifacts/*.exe
 *.obj
 *.log
 *.tlog
@@ -21,6 +22,7 @@ cmake_install.cmake
 # Docs files
 docs/html
 docs/latex
+docs/generated/
 doc/data
 
 # VS Code
@@ -44,6 +46,8 @@ __pycache__/
 
 external/*/
 # Allow tracking of specific submodule(s) inside external despite blanket ignore
-!external/vcpkg/
+!external/cyclonedds/
+!external/cyclonedds-cxx/
+!external/yaml-cpp/
 install/
 

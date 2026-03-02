@@ -1,3 +1,9 @@
-[submodule "external/vcpkg"]
-	path = external/vcpkg
-	url = https://github.com/microsoft/vcpkg.git
+[submodule "external/cyclonedds"]
+	path = external/cyclonedds
+	url = https://github.com/eclipse-cyclonedds/cyclonedds
+[submodule "external/cyclonedds-cxx"]
+	path = external/cyclonedds-cxx
+	url = https://github.com/eclipse-cyclonedds/cyclonedds-cxx
+[submodule "external/yaml-cpp"]
+	path = external/yaml-cpp
+	url = https://github.com/jbeder/yaml-cpp

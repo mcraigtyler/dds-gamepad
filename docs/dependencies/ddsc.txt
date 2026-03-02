@@ -1,0 +1,34 @@
+Microsoft (R) COFF/PE Dumper Version 14.35.32217.1
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file .\ddsc.dll
+
+File Type: DLL
+
+  Image has the following dependencies:
+
+    dbghelp.dll
+    WS2_32.dll
+    IPHLPAPI.DLL
+    bcrypt.dll
+    KERNEL32.dll
+    VCRUNTIME140.dll
+    api-ms-win-crt-runtime-l1-1-0.dll
+    api-ms-win-crt-string-l1-1-0.dll
+    api-ms-win-crt-utility-l1-1-0.dll
+    api-ms-win-crt-stdio-l1-1-0.dll
+    api-ms-win-crt-heap-l1-1-0.dll
+    api-ms-win-crt-convert-l1-1-0.dll
+    api-ms-win-crt-filesystem-l1-1-0.dll
+    api-ms-win-crt-time-l1-1-0.dll
+    api-ms-win-crt-environment-l1-1-0.dll
+
+  Summary
+
+        8000 .data
+        C000 .pdata
+       3D000 .rdata
+        2000 .reloc
+        1000 .rsrc
+       E7000 .text
