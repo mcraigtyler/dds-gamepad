@@ -16,11 +16,11 @@ if(NOT TARGET CycloneDDS-CXX::ddscxx)
   find_package(CycloneDDS-CXX REQUIRED)
 endif()
 
-if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    include(${CMAKE_SOURCE_DIR}/external/vcpkg/scripts/buildsystems/vcpkg.cmake)
-endif()
-
-find_package(yaml-cpp CONFIG REQUIRED)
+# Build yaml-cpp from vendored sub-repo
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "Disable yaml-cpp tests")
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "Disable yaml-cpp tools")
+set(YAML_CPP_INSTALL OFF CACHE BOOL "Do not install yaml-cpp from this build")
+add_subdirectory(${CMAKE_SOURCE_DIR}/external/yaml-cpp ${CMAKE_BINARY_DIR}/yaml-cpp)
 
 include(FetchContent)
 
@@ -47,7 +47,13 @@ set(EXE_SOURCES
     src/app/AppRunner.cpp
         src/config/ConfigLoader.cpp
         src/mapper/MappingEngine.cpp
+        # Windows resource file for version info
+        src/dds-gamepad.rc
 )
+
+if(MSVC)
+  enable_language(RC)
+endif()
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
 
@@ -66,14 +72,14 @@ target_link_libraries(${EXE_NAME}
         ${IDL_LIB}
         CycloneDDS::ddsc
         CycloneDDS-CXX::ddscxx
-        yaml-cpp::yaml-cpp)
+        yaml-cpp)
 
 target_link_libraries(${SERVICE_EXE_NAME}
     PRIVATE
         ${IDL_LIB}
         CycloneDDS::ddsc
         CycloneDDS-CXX::ddscxx
-        yaml-cpp::yaml-cpp
+        yaml-cpp
         Shell32)
 if(WIN32)
     target_compile_definitions(${EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
@@ -126,7 +132,9 @@ if(WIN32)
     target_link_libraries(${EXE_NAME} PRIVATE vigem_wrapper)
     target_link_libraries(${SERVICE_EXE_NAME} PRIVATE vigem_wrapper)
 
-    add_executable(vigem_sanity src/vigem_sample.cpp)
+    add_executable(vigem_sanity src/vigem_sample.cpp
+        # Windows resource file for version info
+        src/vigem_sanity.rc)
     target_link_libraries(vigem_sanity PRIVATE vigem_wrapper)
     target_compile_definitions(vigem_sanity PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
@@ -162,11 +170,9 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
             DESTINATION ${_install_bin}
         )
         # Also copy yaml-cpp runtime DLL next to the installed executable so
-        # local runs don't fail with "yaml-cpp.dll was not found." Use the
-        # target file generator expression to locate the imported target's
-        # runtime file (DLL) provided by vcpkg or other package config.
+        # local runs don't fail with "yaml-cpp.dll was not found." Build-from-source target provides location.
         install(FILES
-            "$<TARGET_FILE:yaml-cpp::yaml-cpp>"
+            "$<TARGET_FILE:yaml-cpp>"
             DESTINATION ${_install_bin}
         )
     endif()

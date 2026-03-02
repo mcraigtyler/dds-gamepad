@@ -44,6 +44,8 @@ __pycache__/
 
 external/*/
 # Allow tracking of specific submodule(s) inside external despite blanket ignore
-!external/vcpkg/
+!external/cyclonedds/
+!external/cyclonedds-cxx/
+!external/yaml-cpp/
 install/
 

@@ -1,11 +1,11 @@
 <#
-PowerShell helper to clone and build CycloneDDS and CycloneDDS-CXX on Windows.
+PowerShell helper to build project dependencies such as CycloneDDS and CycloneDDS-CXX on Windows from vendored sub-repositories.
 
 Usage:
   From the workspace root run (Developer PowerShell recommended):
 
     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
-    .\Scripts\install_cyclonedds.ps1 [-Force] [-Generator "Ninja"]
+    .\Scripts\build_dependencies.ps1 [-Force] [-Generator "Visual Studio 17 2022"]
 
 Parameters:
   -Force      : Rebuild even if install/<repo> already exists (removes the install folder first).
@@ -13,10 +13,11 @@ Parameters:
 
 Prerequisites:
   - Git on PATH
-  - CMake on PATH
+  - CMake on PATH (https://cmake.org/download/)
   - A C/C++ build toolchain (Visual Studio or Ninja + toolchain)
 
-This script clones/updates repositories into <workspace>/external and installs into <workspace>/install.
+This script expects CycloneDDS and CycloneDDS-CXX to be sub-repos under <workspace>/external
+(e.g., added as git submodules), ensures they are initialized/updated, and installs into <workspace>/install.
 #>
 
 [CmdletBinding()]
@@ -53,18 +54,42 @@ if ($false) { $null = $Force; $null = $Generator }
 if (-not (Test-Path $externalDir)) { New-Item -ItemType Directory -Path $externalDir | Out-Null }
 if (-not (Test-Path $installDir))  { New-Item -ItemType Directory -Path $installDir  | Out-Null }
 
-function Get-Repository {
-    param($Name, $Url)
+function Ensure-SubRepo {
+    param(
+        [Parameter(Mandatory=$true)][string]$Name
+    )
     $path = Join-Path $externalDir $Name
+    $relPath = "external/$Name"
+
     if (-not (Test-Path $path)) {
-        Info "Cloning $Name -> $path"
-        & git clone $Url $path | Out-Null
+        Err -Message "Expected sub-repo '$Name' at '$path' not found. Add it as a submodule (e.g., git submodule add) and re-run."
+        throw "Missing sub-repo: $Name"
+    }
+
+    $isGitWorkspace = Test-Path (Join-Path $workspace '.git')
+
+    if ($isGitWorkspace) {
+        Info "Ensuring submodule '$relPath' is initialized and up to date"
+        # Initialize/update to the commit recorded in the superproject
+        & git -C $workspace submodule update --init --recursive -- "$relPath" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Warn -Message "git submodule update failed for $relPath (exit $LASTEXITCODE). Attempting 'git pull' fallback in $path."
+            if (Test-Path (Join-Path $path '.git')) {
+                & git -C $path pull --ff-only | Out-Null
+            }
+        }
     }
     else {
-        Info "Updating $Name at $path"
-        Push-Location $path
-        try { & git pull | Out-Null } finally { Pop-Location }
+        # Not a git workspace (e.g., zipped source). Try a simple pull if it's an independent repo clone.
+        if (Test-Path (Join-Path $path '.git')) {
+            Info "Workspace is not a git repo; pulling latest in '$path'"
+            & git -C $path pull --ff-only | Out-Null
+        }
+        else {
+            Warn -Message "Workspace is not a git repo and '$path' is not a git checkout. Proceeding without update."
+        }
     }
+
     return $path
 }
 
@@ -91,33 +116,49 @@ function InstallFromSource {
     Push-Location $buildDir
     try {
         $cmakeArgs = @()
-        if ($Generator) { $cmakeArgs += '-G'; $cmakeArgs += $Generator }
+        if ($Generator) {
+            $cmakeArgs += '-G'; $cmakeArgs += $Generator
+            if ($Generator -like 'Visual Studio*') {
+                # Ensure VS generator has architecture/toolset set
+                $cmakeArgs += '-A'; $cmakeArgs += 'x64'
+                $cmakeArgs += '-T'; $cmakeArgs += 'host=x64'
+            }
+        }
         $cmakeArgs += '..'
         $cmakeArgs += "-DCMAKE_INSTALL_PREFIX=$InstallPath"
         if ($ExtraCMake) { $cmakeArgs += $ExtraCMake }
 
         Info "Configuring: cmake $($cmakeArgs -join ' ')"
         & cmake @cmakeArgs
+        # Fail fast if configure failed or cache is missing
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $buildDir 'CMakeCache.txt'))) {
+            Err "CMake configure failed (exit $LASTEXITCODE) in $buildDir."
+            return
+        }
 
         Info "Building and installing (Release)"
         & cmake --build . --config Release --target install -- /m
+        if ($LASTEXITCODE -ne 0) {
+            Err "CMake build/install failed (exit $LASTEXITCODE) in $buildDir."
+            return
+        }
     }
     finally {
         Pop-Location
     }
 }
 
-# Repositories and installs
+# Repositories and installs (vendored under external/)
 $cycloneRepo = 'cyclonedds'
-$cycloneUrl  = 'https://github.com/eclipse-cyclonedds/cyclonedds.git'
-$cyclonePath = Get-Repository -Name $cycloneRepo -Url $cycloneUrl
+$cyclonePath = Ensure-SubRepo -Name $cycloneRepo
 $cycloneInstall = Join-Path $installDir $cycloneRepo
 
-InstallFromSource -SourcePath $cyclonePath -InstallPath $cycloneInstall
+# Disable building tests, examples, and ddsperf tool to avoid idlc-driven custom step issues
+$cycloneExtraCMake = @('-DBUILD_TESTING=OFF','-DBUILD_EXAMPLES=OFF','-DBUILD_DDSPERF=OFF')
+InstallFromSource -SourcePath $cyclonePath -InstallPath $cycloneInstall -ExtraCMake $cycloneExtraCMake
 
 $cycloneCxxRepo = 'cyclonedds-cxx'
-$cycloneCxxUrl  = 'https://github.com/eclipse-cyclonedds/cyclonedds-cxx.git'
-$cycloneCxxPath = Get-Repository -Name $cycloneCxxRepo -Url $cycloneCxxUrl
+$cycloneCxxPath = Ensure-SubRepo -Name $cycloneCxxRepo
 $cycloneCxxInstall = Join-Path $installDir $cycloneCxxRepo
 
 # Try to locate the CycloneDDS CMake config dir in the install tree and pass it on
@@ -138,5 +179,4 @@ Info "Example CMake options to consume the install from other builds:"
 Write-Output "  -DCMAKE_PREFIX_PATH=\"$installDir\""
 if ($cmakeOpts) { Write-Output "  $($cmakeOpts -join ' ')" }
 
-# Duplicate trailing content removed - consolidated above.
 # End of script.

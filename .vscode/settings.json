@@ -2,7 +2,10 @@
     "cmake.configureArgs": [
         "-DCMAKE_PREFIX_PATH=${workspaceFolder}/install/cyclonedds;${workspaceFolder}/install/cyclonedds-cxx",
         "-DCMAKE_CONFIGURATION_TYPES=Debug;Release",
-        "-DINSTALL_DIR=${workspaceFolder}/install/dds-gamepad"
+        "-DINSTALL_DIR=${workspaceFolder}/install/dds-gamepad",
+        "-DBUILD_TESTING=OFF",
+        "-DBUILD_EXAMPLES=OFF",
+        "-DBUILD_DDSPERF=OFF"
     ],
     "cmake.exportCompileCommandsFile": true,
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",

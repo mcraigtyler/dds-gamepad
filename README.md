@@ -8,6 +8,8 @@ This repository contains the application and documentation required to build an 
 Before opening VS Code run the following from powershell:
 
 - Initialize Cyclone Libraries: `powershell -NoProfile -ExecutionPolicy Bypass -File .\Scripts\install_cyclonedds.ps1 -Force -Generator "Visual Studio 17 2022"`
+  - If you get errors cloning on OSK machines make sure you have an ssh key setup in github and you are cloning via https with the following git config set: `git config --global http.sslBackend schannel`
+  - If you get errors building ensure you are using the correct version of cmake. You should be using the Kitware cmake and not the one in Visual Studio.
 - Initlialize Git Submodules: `git submodule update --init --recursive`
 - Initialize vcpkg Submodule: `.\external\vcpkg\bootstrap-vcpkg.bat`
 - Install the ViGEmBus driver (required for virtual controllers). Download the latest installer from https://github.com/nefarius/ViGEmBus/releases and run it as administrator.

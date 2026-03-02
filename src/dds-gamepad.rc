@@ -1,0 +1,43 @@
+#include <windows.h>
+
+#define VER_FILEVERSION             1,0,2,0
+#define VER_FILEVERSION_STR         "1.0.2.0"
+
+#define VER_PRODUCTVERSION          1,0,2,0
+#define VER_PRODUCTVERSION_STR      "1.0.2"
+
+#ifndef DEBUG
+#define VER_DEBUG                   0
+#else
+#define VER_DEBUG                   VS_FF_DEBUG
+#endif
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     VER_FILEVERSION
+PRODUCTVERSION  VER_PRODUCTVERSION
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       (VER_DEBUG)
+FILEOS          VOS__WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"  // US English, Unicode
+        BEGIN
+            VALUE "CompanyName",        "Oshkosh Corporation"
+            VALUE "FileDescription",   "DDS Gamepad"
+            VALUE "FileVersion",       VER_FILEVERSION_STR
+            VALUE "InternalName",      "dds-gamepad"
+            VALUE "LegalCopyright",    "Copyright (C) 2026. All rights reserved."
+            VALUE "OriginalFilename",  "dds-gamepad.exe"
+            VALUE "ProductName",       "DDS Gamepad"
+            VALUE "ProductVersion",    VER_PRODUCTVERSION_STR
+            VALUE "Comments",          "Translate DDS messages to Gamepad inputs"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200  // US English, Unicode
+    END
+END
