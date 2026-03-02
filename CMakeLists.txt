@@ -1,5 +1,58 @@
-﻿cmake_minimum_required(VERSION 3.31)
+cmake_minimum_required(VERSION 3.28.3)
 project(dds-gamepad)
+
+# --- Version (derived from git at configure time) ---
+find_package(Git QUIET)
+if(Git_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_COMMIT_COUNT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_COMMIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+else()
+    set(GIT_COMMIT_COUNT "0")
+    set(GIT_COMMIT_HASH "unknown")
+endif()
+set(APP_VERSION_MAJOR 0)
+set(APP_VERSION_MINOR 3)
+set(APP_VERSION_PATCH ${GIT_COMMIT_COUNT})
+set(APP_VERSION "${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH}")
+set(APP_VERSION_FULL "${APP_VERSION}+${GIT_COMMIT_HASH}")
+message(STATUS "dds-gamepad version: ${APP_VERSION_FULL}")
+
+# Bootstrap version files at configure time so the build dir is populated
+# before the first build runs.
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/version.h"
+)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/version.rc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/version.rc"
+)
+
+# Regenerate version files at build time so new commits are picked up
+# without a manual reconfigure.
+add_custom_target(generate_version ALL
+    COMMAND ${CMAKE_COMMAND}
+        -DGIT_EXECUTABLE=${GIT_EXECUTABLE}
+        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DVERSION_MAJOR=${APP_VERSION_MAJOR}
+        -DVERSION_MINOR=${APP_VERSION_MINOR}
+        -DHEADER_TEMPLATE=${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in
+        -DRC_TEMPLATE=${CMAKE_CURRENT_SOURCE_DIR}/src/version.rc.in
+        -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -DCMAKE_COMMAND=${CMAKE_COMMAND}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
 
 if(NOT WIN32)
     message(FATAL_ERROR "dds-gamepad is a Windows-only application")
@@ -45,10 +98,11 @@ set(EXE_SOURCES
         src/main.cpp
     src/console/RxTable.cpp
     src/app/AppRunner.cpp
+    src/app/StatusPoller.cpp
         src/config/ConfigLoader.cpp
         src/mapper/MappingEngine.cpp
-        # Windows resource file for version info
-        src/dds-gamepad.rc
+        src/emulator/UdpProtobufEmulator.cpp
+        ${CMAKE_CURRENT_BINARY_DIR}/version.rc
 )
 
 if(MSVC)
@@ -56,17 +110,23 @@ if(MSVC)
 endif()
 
 add_executable(${EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${EXE_SOURCES})
+add_dependencies(${EXE_NAME} generate_version)
 
 set(SERVICE_SOURCES
     src/service/ServiceMain.cpp
     src/service/EventLog.cpp
     src/console/RxTable.cpp
     src/app/AppRunner.cpp
+    src/app/StatusPoller.cpp
     src/config/ConfigLoader.cpp
     src/mapper/MappingEngine.cpp
+    src/emulator/UdpProtobufEmulator.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/version.rc
 )
 
 add_executable(${SERVICE_EXE_NAME} ${EXE_HEADERS} ${IDL_HEADERS} ${SERVICE_SOURCES})
+add_dependencies(${SERVICE_EXE_NAME} generate_version)
+
 target_link_libraries(${EXE_NAME}
     PRIVATE
         ${IDL_LIB}
@@ -85,17 +145,15 @@ if(WIN32)
     target_compile_definitions(${EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
     target_compile_definitions(${SERVICE_EXE_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
 endif()
-target_include_directories(${EXE_NAME} PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
-        "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
-
-target_include_directories(${SERVICE_EXE_NAME} PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
-        "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx")
+set(COMMON_INCLUDE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+    "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/install/cyclonedds-cxx/include/ddscxx"
+)
+target_include_directories(${EXE_NAME} PUBLIC ${COMMON_INCLUDE_DIRS})
+target_include_directories(${SERVICE_EXE_NAME} PUBLIC ${COMMON_INCLUDE_DIRS})
 
 if(WIN32)
     set(VIGEMCLIENT_SOURCE_DIR "" CACHE PATH "Optional local path to ViGEmClient source")
@@ -178,13 +236,9 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
     endif()
 
     if(WIN32)
-        # Include optional installer binaries from the repository external/ folder
-        set(_external_dir "${CMAKE_CURRENT_SOURCE_DIR}/external")
-        install(FILES
-            "${_external_dir}/ViGEmBus_1.22.0_x64_x86_arm64.exe"
-            "${_external_dir}/vc_redist.x64.exe"
+        # Include installer binaries from the artifacts/ folder
+        install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/artifacts/"
             DESTINATION ${INSTALL_DIR}/installers
-            OPTIONAL
         )
     endif()
 
@@ -200,13 +254,11 @@ if(NOT "${INSTALL_DIR}" STREQUAL "")
         DESTINATION ${INSTALL_DIR}
     )
 
-        # Install top-level config files (YAML) used by the application
-        install(DIRECTORY config/
-            DESTINATION ${INSTALL_DIR}/config
-            FILES_MATCHING PATTERN "*.yaml")
-
-        # Service convention: config lives next to the service executable.
-        install(DIRECTORY config/
-            DESTINATION ${INSTALL_DIR}/bin/config
-            FILES_MATCHING PATTERN "*.yaml")
+    # Config files — installed to bin/config only (next to both executables).
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/driver.yaml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/gunner.yaml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/combined.yaml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/README.md"
+        DESTINATION ${INSTALL_DIR}/bin/config)
 endif()

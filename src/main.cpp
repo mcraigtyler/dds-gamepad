@@ -10,19 +10,22 @@
 #include <Windows.h>
 
 #include "app/AppRunner.h"
+#include "version.h"
 
 void print_usage(const char* exe)
 {
-    std::cerr << "Usage: " << exe << " <config_dir> <domain_id> [--debug | --table]" << std::endl;
+    std::cerr << "Usage: " << exe << " <config_file> <domain_id> <yoke_id> [--debug | --table]" << std::endl;
     std::cerr << "       " << exe << " --help" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Args:" << std::endl;
-    std::cerr << "  <config_dir>      Directory containing one or more YAML config files." << std::endl;
+    std::cerr << "  <config_file>     YAML role config file (for example: config/driver.yaml)." << std::endl;
     std::cerr << "  <domain_id>       DDS domain id (integer)." << std::endl;
+    std::cerr << "  <yoke_id>         Yoke sub_role id used to filter incoming DDS messages." << std::endl;
     std::cerr << std::endl;
     std::cerr << "Options:" << std::endl;
     std::cerr << "  --debug            Enable verbose raw input logging (rx_raw...)." << std::endl;
     std::cerr << "  --table            Live table + a tx state line (no scrolling)." << std::endl;
+    std::cerr << "  --version          Print version and exit." << std::endl;
     std::cerr << "  -h, --help         Show this help text." << std::endl;
 }
 
@@ -59,8 +62,13 @@ int main(int argc, char* argv[])
     bool table_mode = false;
     std::string config_path;
     std::optional<int> domain_id;
+    std::optional<int> yoke_id;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
+        if (arg == "--version") {
+            std::cout << APP_VERSION_FULL << std::endl;
+            return EXIT_SUCCESS;
+        }
         if (arg == "-h" || arg == "--help") {
             print_usage(argv[0]);
             return EXIT_SUCCESS;
@@ -91,6 +99,15 @@ int main(int argc, char* argv[])
             }
             continue;
         }
+        if (!yoke_id.has_value()) {
+            try {
+                yoke_id = std::stoi(arg);
+            } catch (const std::exception&) {
+                std::cerr << "Invalid yoke_id: " << arg << std::endl;
+                return EXIT_FAILURE;
+            }
+            continue;
+        }
 
         std::cerr << "Unexpected argument: " << arg << std::endl;
         print_usage(argv[0]);
@@ -108,6 +125,12 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    if (!yoke_id.has_value()) {
+        std::cerr << "Missing required yoke_id." << std::endl;
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
     if (table_mode && log_rx_raw) {
         std::cerr << "Options --debug and --table are mutually exclusive." << std::endl;
         print_usage(argv[0]);
@@ -115,8 +138,9 @@ int main(int argc, char* argv[])
     }
 
     app::AppRunnerOptions options;
-    options.configDir = config_path;
+    options.configFile = config_path;
     options.domainId = *domain_id;
+    options.yokeId = *yoke_id;
     options.logRxRaw = log_rx_raw;
     options.tableMode = table_mode;
 

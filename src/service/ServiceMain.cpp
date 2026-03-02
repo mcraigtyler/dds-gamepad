@@ -124,6 +124,59 @@ std::optional<int> ParseDomainIdFromArgs(int argc, wchar_t** argv)
     return std::nullopt;
 }
 
+
+std::optional<int> ParseYokeIdFromArgs(int argc, wchar_t** argv)
+{
+    for (int i = 1; i < argc; ++i) {
+        const std::wstring arg = argv[i];
+
+        // --yoke-id 1004
+        if (arg == L"--yoke-id" || arg == L"--yokeid") {
+            if (i + 1 >= argc) {
+                return std::nullopt;
+            }
+            try {
+                return std::stoi(argv[i + 1]);
+            } catch (...) {
+                return std::nullopt;
+            }
+        }
+
+        // --yoke-id=1004
+        constexpr std::wstring_view prefix = L"--yoke-id=";
+        if (arg.rfind(prefix.data(), 0) == 0) {
+            try {
+                return std::stoi(arg.substr(prefix.size()));
+            } catch (...) {
+                return std::nullopt;
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> ParseConfigFileFromArgs(int argc, wchar_t** argv)
+{
+    for (int i = 1; i < argc; ++i) {
+        const std::wstring arg = argv[i];
+
+        if (arg == L"--config-file" || arg == L"--config") {
+            if (i + 1 >= argc) {
+                return std::nullopt;
+            }
+            return std::filesystem::path(argv[i + 1]).string();
+        }
+
+        constexpr std::wstring_view prefix = L"--config-file=";
+        if (arg.rfind(prefix.data(), 0) == 0) {
+            return std::filesystem::path(arg.substr(prefix.size())).string();
+        }
+    }
+
+    return std::nullopt;
+}
+
 std::optional<int> ParseDomainIdFromCommandLine()
 {
     int argc = 0;
@@ -135,6 +188,32 @@ std::optional<int> ParseDomainIdFromCommandLine()
     const auto domainId = ParseDomainIdFromArgs(argc, argv);
     LocalFree(argv);
     return domainId;
+}
+
+std::optional<int> ParseYokeIdFromCommandLine()
+{
+    int argc = 0;
+    wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv == nullptr || argc <= 0) {
+        return std::nullopt;
+    }
+
+    const auto yokeId = ParseYokeIdFromArgs(argc, argv);
+    LocalFree(argv);
+    return yokeId;
+}
+
+std::optional<std::string> ParseConfigFileFromCommandLine()
+{
+    int argc = 0;
+    wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv == nullptr || argc <= 0) {
+        return std::nullopt;
+    }
+
+    const auto configFile = ParseConfigFileFromArgs(argc, argv);
+    LocalFree(argv);
+    return configFile;
 }
 
 std::filesystem::path GetExecutableDirectory()
@@ -198,12 +277,23 @@ void WINAPI ServiceMain(DWORD argc, wchar_t** argv)
         return;
     }
 
+    const auto yokeId = ParseYokeIdFromCommandLine();
+    if (!yokeId.has_value()) {
+        if (gEventLog) {
+            gEventLog->Error(L"Startup failed: missing or invalid --yoke-id.");
+        }
+        SetServiceState(SERVICE_STOPPED, ERROR_INVALID_PARAMETER, 1);
+        return;
+    }
+
     const std::filesystem::path exeDir = GetExecutableDirectory();
-    const std::filesystem::path configDir = exeDir / "config";
+    const std::filesystem::path defaultConfigFile = exeDir / "config" / "driver.yaml";
+    const std::string configFile = ParseConfigFileFromCommandLine().value_or(defaultConfigFile.string());
 
     app::AppRunnerOptions options;
-    options.configDir = configDir.string();
+    options.configFile = configFile;
     options.domainId = *domainId;
+    options.yokeId = *yokeId;
     options.logRxRaw = false;
     options.tableMode = false;
     options.logStartup = false;
@@ -214,7 +304,8 @@ void WINAPI ServiceMain(DWORD argc, wchar_t** argv)
 
     if (gEventLog) {
         std::wstring msg = L"Starting runner. domainId=" + std::to_wstring(*domainId) +
-                           L" configDir=" + configDir.wstring();
+                           L" yokeId=" + std::to_wstring(*yokeId) +
+                           L" configFile=" + ToWString(configFile);
         gEventLog->Info(msg);
     }
 

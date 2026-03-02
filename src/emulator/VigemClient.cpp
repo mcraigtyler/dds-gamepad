@@ -7,8 +7,12 @@
 
 #include <ViGEm/Client.h>
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <limits>
 #include <sstream>
+#include <stdexcept>
 
 namespace emulator {
 namespace {
@@ -51,6 +55,80 @@ std::string StatusToString(VIGEM_ERROR status) {
         }
     }
 }
+
+// XUSB_REPORT button/dpad masks
+constexpr uint16_t kDpadUpMask    = 0x0001;
+constexpr uint16_t kDpadDownMask  = 0x0002;
+constexpr uint16_t kDpadLeftMask  = 0x0004;
+constexpr uint16_t kDpadRightMask = 0x0008;
+constexpr uint16_t kButtonAMask   = 0x1000;
+constexpr uint16_t kButtonBMask   = 0x2000;
+constexpr uint16_t kButtonXMask   = 0x4000;
+constexpr uint16_t kButtonYMask   = 0x8000;
+
+int16_t AxisFromNormalized(float value) {
+    if (value <= -1.0f) {
+        return std::numeric_limits<int16_t>::min();
+    }
+    if (value >= 1.0f) {
+        return std::numeric_limits<int16_t>::max();
+    }
+    return static_cast<int16_t>(std::lround(value * static_cast<float>(std::numeric_limits<int16_t>::max())));
+}
+
+uint8_t TriggerFromNormalized(float value) {
+    const float clamped = std::clamp(value, 0.0f, 1.0f);
+    return static_cast<uint8_t>(std::lround(clamped * 255.0f));
+}
+
+// Builds an XUSB_REPORT from the generic OutputState channels.
+// Channel keys are the raw "output.to" strings from the YAML config.
+// Unknown channels are silently ignored.
+XUSB_REPORT BuildReport(const common::OutputState& state) {
+    XUSB_REPORT report;
+    XUSB_REPORT_INIT(&report);
+    for (const auto& [key, val] : state.channels) {
+        if (key == "axis:left_trigger") {
+            report.bLeftTrigger = TriggerFromNormalized(val);
+        } else if (key == "axis:right_trigger") {
+            report.bRightTrigger = TriggerFromNormalized(val);
+        } else if (key == "axis:left_x") {
+            report.sThumbLX = AxisFromNormalized(val);
+        } else if (key == "axis:left_y") {
+            report.sThumbLY = AxisFromNormalized(val);
+        } else if (key == "axis:right_x") {
+            report.sThumbRX = AxisFromNormalized(val);
+        } else if (key == "axis:right_y") {
+            report.sThumbRY = AxisFromNormalized(val);
+        } else if (key == "button:a") {
+            if (val > 0.5f) report.wButtons |= kButtonAMask;
+            else report.wButtons &= static_cast<uint16_t>(~kButtonAMask);
+        } else if (key == "button:b") {
+            if (val > 0.5f) report.wButtons |= kButtonBMask;
+            else report.wButtons &= static_cast<uint16_t>(~kButtonBMask);
+        } else if (key == "button:x") {
+            if (val > 0.5f) report.wButtons |= kButtonXMask;
+            else report.wButtons &= static_cast<uint16_t>(~kButtonXMask);
+        } else if (key == "button:y") {
+            if (val > 0.5f) report.wButtons |= kButtonYMask;
+            else report.wButtons &= static_cast<uint16_t>(~kButtonYMask);
+        } else if (key == "dpad:up") {
+            if (val > 0.5f) report.wButtons |= kDpadUpMask;
+            else report.wButtons &= static_cast<uint16_t>(~kDpadUpMask);
+        } else if (key == "dpad:down") {
+            if (val > 0.5f) report.wButtons |= kDpadDownMask;
+            else report.wButtons &= static_cast<uint16_t>(~kDpadDownMask);
+        } else if (key == "dpad:left") {
+            if (val > 0.5f) report.wButtons |= kDpadLeftMask;
+            else report.wButtons &= static_cast<uint16_t>(~kDpadLeftMask);
+        } else if (key == "dpad:right") {
+            if (val > 0.5f) report.wButtons |= kDpadRightMask;
+            else report.wButtons &= static_cast<uint16_t>(~kDpadRightMask);
+        }
+        // Unknown channels are silently ignored.
+    }
+    return report;
+}
 }  // namespace
 
 VigemClient::VigemClient()
@@ -66,60 +144,49 @@ VigemClient::~VigemClient() {
     Disconnect();
 }
 
-bool VigemClient::Connect() {
-    ResetError();
-
+void VigemClient::Connect() {
     if (!client_) {
         client_ = vigem_alloc();
         if (!client_) {
-            SetError("Failed to allocate ViGEm client.");
-            return false;
+            throw std::runtime_error("Failed to allocate ViGEm client.");
         }
     }
 
     if (connected_) {
-        return true;
+        return;
     }
 
     const auto status = vigem_connect(static_cast<PVIGEM_CLIENT>(client_));
     if (!VIGEM_SUCCESS(status)) {
-        SetError("vigem_connect failed: " + StatusToString(status));
-        return false;
+        throw std::runtime_error("vigem_connect failed: " + StatusToString(status));
     }
 
     connected_ = true;
-    return true;
 }
 
-bool VigemClient::AddX360Controller() {
-    ResetError();
-
+void VigemClient::AddX360Controller() {
     if (!connected_) {
-        SetError("ViGEm client is not connected.");
-        return false;
+        throw std::runtime_error("ViGEm client is not connected.");
     }
 
     if (!target_) {
         target_ = vigem_target_x360_alloc();
         if (!target_) {
-            SetError("Failed to allocate Xbox 360 target.");
-            return false;
+            throw std::runtime_error("Failed to allocate Xbox 360 target.");
         }
     }
 
     if (controller_added_) {
-        return true;
+        return;
     }
 
     const auto status = vigem_target_add(static_cast<PVIGEM_CLIENT>(client_),
                                          static_cast<PVIGEM_TARGET>(target_));
     if (!VIGEM_SUCCESS(status)) {
-        SetError("vigem_target_add failed: " + StatusToString(status));
-        return false;
+        throw std::runtime_error("vigem_target_add failed: " + StatusToString(status));
     }
 
     controller_added_ = true;
-    return true;
 }
 
 bool VigemClient::UpdateRightTrigger(uint8_t value) {
@@ -145,7 +212,7 @@ bool VigemClient::UpdateRightTrigger(uint8_t value) {
     return true;
 }
 
-bool VigemClient::UpdateState(const mapper::GamepadState& state) {
+bool VigemClient::UpdateState(const common::OutputState& state) {
     ResetError();
 
     if (!controller_added_) {
@@ -153,14 +220,7 @@ bool VigemClient::UpdateState(const mapper::GamepadState& state) {
         return false;
     }
 
-    XUSB_REPORT report;
-    XUSB_REPORT_INIT(&report);
-    report.sThumbLX = state.left_stick_x;
-    report.sThumbLY = state.left_stick_y;
-    report.sThumbRX = state.right_stick_x;
-    report.sThumbRY = state.right_stick_y;
-    report.bLeftTrigger = state.left_trigger;
-    report.bRightTrigger = state.right_trigger;
+    const XUSB_REPORT report = BuildReport(state);
 
     const auto status = vigem_target_x360_update(static_cast<PVIGEM_CLIENT>(client_),
                                                  static_cast<PVIGEM_TARGET>(target_),
@@ -173,14 +233,11 @@ bool VigemClient::UpdateState(const mapper::GamepadState& state) {
     if (tx_state_listener_ != nullptr) {
         tx_state_listener_->OnTxState(state);
     } else if (log_state_) {
-        std::cout << "tx state"
-                  << " LT=" << static_cast<int>(state.left_trigger)
-                  << " RT=" << static_cast<int>(state.right_trigger)
-                  << " LX=" << state.left_stick_x
-                  << " LY=" << state.left_stick_y
-                  << " RX=" << state.right_stick_x
-                  << " RY=" << state.right_stick_y
-                  << std::endl;
+        std::cout << "tx state";
+        for (const auto& [key, val] : state.channels) {
+            std::cout << " " << key << "=" << val;
+        }
+        std::cout << std::endl;
     }
 
     return true;

@@ -34,54 +34,60 @@ If you use the cmake tool in VS Code the Configure in that extension will pull f
 
 ## Run DDS Gamepad
 
-The main `dds-gamepad` executable reads every YAML file in a config folder. Each config defines one DDS topic and a single mapping rule. Incoming values are expected to be in the `0.0` to `1.0` range and are scaled to the target control range.
+The `dds-gamepad` executable now accepts a **single role config file**, domain id, and yoke id.
 
-`.\install\boilerplate-dds\bin\dds-gamepad.exe <config_dir> [domain_id]`
-`.\install\boilerplate-dds\bin\dds-gamepad.exe <config_dir> <domain_id>`
-
-### Example config (one file per topic)
-
-```yaml
-dds:
-  topic: "vehicle.throttle"
-  type: "Gamepad_Analog"
-  idl_file: "idl/Gamepad.idl"
-
-mapping:
-  - name: throttle
-    id: 1
-    field: value
-    to: axis:right_trigger
-    scale: 1.0
-    deadzone: 0.05
-    invert: false
+```powershell
+.\bin\dds-gamepad.exe <config_file> <domain_id> <yoke_id>
 ```
 
-Steering example using the `Stick_TwoAxis.x` field:
+Example:
+
+```powershell
+.\bin\dds-gamepad.exe .\config\combined.yaml 0 1004 --table
+```
+
+### Role-based config schema
+
+Configs are role-based (`config/driver.yaml`, `config/gunner.yaml`) and use this shape:
 
 ```yaml
-dds:
-  topic: "vehicle.steering"
-  type: "Stick_TwoAxis"
-  idl_file: "idl/Gamepad.idl"
+role:
+  name: "Driver"
 
-mapping:
+# Optional — selects the output backend. Defaults to vigem_x360 if absent.
+output:
+  type: vigem_x360        # "vigem_x360" or "udp_protobuf"
+  # host: 192.168.1.100   # udp_protobuf only
+  # port: 5000            # udp_protobuf only
+
+mappings:
   - name: steering
-    id: 2
-    field: x
-    to: axis:left_x
-    scale: 1.0
-    deadzone: 0.05
-    invert: false
+    dds:
+      topic: "Gamepad_Stick_TwoAxis"
+      type: "Gamepad::Stick_TwoAxis"
+      idl_file: "idl/Gamepad.idl"
+      id: 30
+      field: x
+      input_min: -110.0
+      input_max: 110.0
+    output:               # also accepted: gamepad: (legacy alias)
+      to: axis:right_x
+      scale: 1.0
+      deadzone: 0.02
+      invert: false
+      # type: axis        # optional: axis | trigger | button
+                          # inferred from the "to" prefix for vigem_x360 targets;
+                          # required for udp_protobuf custom field names
 ```
 
 ### Mapping notes
 
-- Place one YAML file per DDS topic in the config directory.
-- Each config must include exactly one mapping entry.
-- `id` matches `role_id` values coming from DDS.
-- `field` supports `value` for `Gamepad_Analog` and `x` for `Stick_TwoAxis` (steering uses `x` only).
-- `to` supports `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`.
+- One role config file can contain multiple mappings across topics.
+- `dds.id` matches DDS role id values.
+- `yoke_id` is not configured in YAML; pass it on the command line as `<yoke_id>` (or `--yoke-id` for service mode).
+- `dds.field` supports `value`, `x`, and `y` depending on DDS type.
+- `output.to` (or `gamepad.to`) for `vigem_x360`: `axis:left_trigger`, `axis:right_trigger`, `axis:left_x`, `axis:left_y`, `axis:right_x`, `axis:right_y`, `button:a`, `button:b`, `button:x`, `button:y`, `dpad:up`, `dpad:down`, `dpad:left`, `dpad:right`.
+- For `udp_protobuf`, `output.to` is the protobuf field name used verbatim; set `output.type` explicitly.
 - `scale` is applied before `deadzone` and `invert`.
 - `invert` flips axis direction for sticks or maps triggers as `1.0 - value`.
 
@@ -127,7 +133,7 @@ Compress-Archive -Path install\dds-gamepad\* -DestinationPath release\dds-gamepa
 
 ```powershell
 cd bin
-.\dds-gamepad.exe ..\config
+.\dds-gamepad.exe ..\config\driver.yaml 50 1004 --table
 ```
 
 ## Windows Service
@@ -135,15 +141,16 @@ cd bin
 The install tree also includes a Windows Service binary: `bin\dds-gamepad-service.exe`.
 
 Service conventions:
-- Config directory: `bin\config\` (next to the service executable)
+- Config file: defaults to `bin\config\driver.yaml` (next to the service executable)
 - Domain id: supplied via the service `binPath` argument `--domain-id <n>`
+- Yoke id: supplied via the service `binPath` argument `--yoke-id <sub_role>`
 - Logs: Windows Event Log (Application) under source `dds-gamepad-service`
 
 To install/start/stop the service (run PowerShell as Administrator):
 
 ```powershell
 cd C:\dds-gamepad
-.\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 0 -StartType Automatic
+.\install_service.ps1 -Action Install -InstallDir (Get-Location).ProviderPath -DomainId 50 -YokeId 1004 -ConfigFilePath "bin\config\driver.yaml" -StartType Automatic
 .\install_service.ps1 -Action Start
 ```
 
@@ -157,4 +164,4 @@ To stop/uninstall:
 Notes:
 - If the `installers` folder is missing from the install tree, place the `vc_redist.x64.exe` and ViGEmBus installer in the `installers` folder before running the installers.
 - The app expects Release builds of third-party DLLs (no `*D.dll` debug runtimes) — ship Release artifacts only.
-- Include the `config` folder contents when packaging so `dds-gamepad.exe` can find YAML files describing topics and mappings.
+- Include `config\driver.yaml` and `config\gunner.yaml` when packaging so both console and service modes can load role mappings.
